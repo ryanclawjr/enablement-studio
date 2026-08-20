@@ -27,7 +27,6 @@ from enablement_studio.textutil import extract_title
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 TEMPLATE_PATH = TEMPLATE_DIR / "page.html"
-LANDING_PATH = TEMPLATE_DIR / "landing.html"
 RECENT_LIMIT = 20
 
 ROLE_STEPS = ("source", "graph", "objectives", "outline", "practice", "quiz")
@@ -92,14 +91,6 @@ def resolve_role_step(
     return requested
 
 
-def render_landing(*, notice: str | None = None) -> str:
-    template = LANDING_PATH.read_text(encoding="utf-8")
-    notice_html = ""
-    if notice:
-        notice_html = f'<p class="notice" role="status">{_e(notice)}</p>'
-    return _fill(template, {"{{notice_block}}": notice_html})
-
-
 def render_page(
     *,
     product: Product,
@@ -112,18 +103,23 @@ def render_page(
     compare_output: ProductOutput | None = None,
     compare_run: SavedRun | None = None,
     step: str | None = None,
+    notice: str | None = None,
 ) -> str:
     template = TEMPLATE_PATH.read_text(encoding="utf-8")
     resolved = resolve_role_step(step, run=run, output=output)
     has_key = llm_configured()
     comparing = compare_run is not None and compare_output is not None and run is not None
+    body_class = f"product-role step-{resolved}"
+    if comparing:
+        body_class += " comparing"
     return _fill(
         template,
         {
             "{{page_title}}": _e(_page_title(resolved)),
-            "{{body_class}}": _e(f"product-role step-{resolved}"),
+            "{{body_class}}": _e(body_class),
             "{{project}}": _e(project),
             "{{path_chrome}}": _path_chrome(resolved, run, output),
+            "{{notice_block}}": _notice_block(notice),
             "{{source_strip}}": (
                 ""
                 if resolved == "source"
@@ -175,22 +171,22 @@ def _source_form(text: str, project: str, has_key: bool) -> str:
     llm_disabled = "" if has_key else " disabled"
     llm_caption = "" if has_key else ' <span class="no-key-caption">(no key)</span>'
     return (
-        '<form method="post" action="/role" class="role-form">'
+        '<form method="post" action="/" class="role-form">'
         '<input type="hidden" name="product" value="role">'
-        '<p class="source-copy">Paste a job or SOP, or Run Harborline.</p>'
-        '<label class="stack">Project'
-        f'<input type="text" name="project" value="{_e(project)}" autocomplete="off">'
-        "</label>"
         '<label class="stack">Job, SOP, or policy'
         f'<textarea name="text" spellcheck="false" placeholder="Paste a job or SOP...">{_e(text)}</textarea>'
+        "</label>"
+        '<label class="stack">Project'
+        f'<input type="text" name="project" value="{_e(project)}" autocomplete="off">'
         "</label>"
         '<div class="actions">'
         '<button class="run" type="submit" name="action" value="run">Run</button>'
         f'<button class="llm" type="submit" name="action" value="llm"{llm_disabled}>LLM{llm_caption}</button>'
-        '<button class="llm" type="submit" name="action" value="demo">Run Harborline</button>'
-        '<span class="hint">EXAMPLE DATA</span>'
         "</div>"
-        '<p class="hint">Run uses the deterministic offline engine. LLM is optional.</p>'
+        '<p class="harborline">'
+        '<button class="text-action" type="submit" name="action" value="demo">Run Harborline</button>'
+        " · EXAMPLE DATA"
+        "</p>"
         "</form>"
     )
 
@@ -211,7 +207,7 @@ def _source_strip(
         f'<span class="source-strip-title">{_e(title)}</span>'
         f'<pre class="source-strip-preview">{_e(preview)}</pre>'
         "</summary>"
-        '<form method="post" action="/role" class="role-form">'
+        '<form method="post" action="/" class="role-form">'
         '<input type="hidden" name="product" value="role">'
         f'<input type="hidden" name="project" value="{_e(project)}">'
         f'<textarea name="text" spellcheck="false">{_e(text)}</textarea>'
@@ -280,9 +276,7 @@ def _role_step_object(step: str, output: RoleEnablement) -> str:
 def _step_nav(step: str, run: SavedRun | None, output: ProductOutput | None) -> str:
     current_idx = ROLE_STEPS.index(step)
     parts: list[str] = []
-    if step == "source":
-        parts.append('<a class="btn-action back" href="/">Back</a>')
-    elif run is not None and current_idx > 0:
+    if step != "source" and run is not None and current_idx > 0:
         prev = ROLE_STEPS[current_idx - 1]
         parts.append(
             f'<a class="btn-action back" href="{_e(role_path(run.id, prev))}">Back</a>'
@@ -317,6 +311,12 @@ def _fill(template: str, mapping: dict[str, str]) -> str:
         pieces.append(template[cursor:found_at])
         pieces.append(mapping[found_token])
         cursor = found_at + len(found_token)
+
+
+def _notice_block(notice: str | None) -> str:
+    if not notice:
+        return ""
+    return f'<p class="notice" role="status">{_e(notice)}</p>'
 
 
 def _error_block(error: str | None) -> str:
