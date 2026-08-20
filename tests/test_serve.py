@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import http.client
 import threading
+import time
+from http.server import ThreadingHTTPServer
 from urllib.parse import urlencode
+from urllib.request import Request
 
 import pytest
 
@@ -85,6 +88,18 @@ def test_get_home_names_three_products(server) -> None:
     assert "Call → Coach" in body
     assert "Lesson critic" in body
     assert "onboarding buddy" not in body.lower()
+    assert 'type="radio"' not in body
+    assert 'name="product"' in body
+    assert "Run Harborline example (EXAMPLE DATA)" in body
+
+
+def test_make_server_is_threaded() -> None:
+    httpd = make_server("127.0.0.1", 0)
+    try:
+        assert isinstance(httpd, ThreadingHTTPServer)
+        assert httpd.daemon_threads is True
+    finally:
+        httpd.server_close()
 
 
 def test_post_role_harborline_saves_run(server, job_text: str) -> None:
@@ -114,12 +129,112 @@ def test_post_role_harborline_saves_run(server, job_text: str) -> None:
     assert "not a successful Role module" not in body
 
 
-def test_post_empty_text_is_400(server) -> None:
+def test_post_empty_text_stays_on_studio(server) -> None:
     posted = urlencode({"product": "role", "text": "", "project": "default"})
     status, body, _location = _http(server, "POST", "/", body=posted, follow=False)
-    assert status == 400
-    assert "Role → Enablement" in body
+    assert status == 200
+    assert "Role studio" in body
+    assert "Sit a JD, SOP, or policy on the table." in body
+    assert "Run Harborline example (EXAMPLE DATA)" in body
+    assert 'type="radio"' not in body
+    assert "<!DOCTYPE html>" in body
     assert Store(default_db_path()).list_runs() == []
+
+
+def test_run_with_slow_llm_env_returns_offline_board(
+    server, job_text: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def slow_urlopen(_request: Request, timeout: object = None) -> None:
+        time.sleep(25)
+        raise TimeoutError("LLM should not run on studio Run")
+
+    monkeypatch.setenv("ENABLEMENT_LLM_API_KEY", "test-key-not-real")
+    monkeypatch.setattr(
+        "enablement_studio.engine.urllib.request.urlopen", slow_urlopen
+    )
+    posted = urlencode(
+        {"product": "role", "text": job_text, "project": "default", "action": "run"}
+    )
+    started = time.monotonic()
+    status, body, _location = _http(server, "POST", "/", body=posted)
+    elapsed = time.monotonic() - started
+    assert elapsed < 3
+    assert status == 200
+    assert "SKILL GRAPH" in body
+    assert "Account Executive" in body
+    assert "engine offline" in body
+    assert "LEARNING OBJECTIVES" in body
+    assert "30-MINUTE MODULE" in body
+    assert "APPLICATION QUIZ" in body
+    get_started = time.monotonic()
+    get_status, home, _location = _http(server, "GET", "/")
+    assert time.monotonic() - get_started < 2
+    assert get_status == 200
+    assert "Role studio" in home
+
+
+def test_in_flight_llm_does_not_block_get(
+    server, job_text: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started = threading.Event()
+    release = threading.Event()
+
+    def blocking_urlopen(_request: Request, timeout: object = None) -> None:
+        started.set()
+        if not release.wait(timeout=10):
+            raise TimeoutError("test did not release LLM")
+        raise TimeoutError("released")
+
+    monkeypatch.setenv("ENABLEMENT_LLM_API_KEY", "test-key-not-real")
+    monkeypatch.setattr(
+        "enablement_studio.engine.urllib.request.urlopen", blocking_urlopen
+    )
+    posted = urlencode(
+        {"product": "role", "text": job_text, "project": "default", "action": "llm"}
+    )
+    result: dict[str, object] = {}
+
+    def do_post() -> None:
+        result["post"] = _http(server, "POST", "/", body=posted)
+
+    worker = threading.Thread(target=do_post)
+    worker.start()
+    assert started.wait(timeout=3)
+    get_started = time.monotonic()
+    status, body, _location = _http(server, "GET", "/")
+    assert time.monotonic() - get_started < 2
+    assert status == 200
+    assert "Role studio" in body
+    assert "Sit a JD, SOP, or policy on the table" in body or "Nothing on the board yet" in body
+    release.set()
+    worker.join(timeout=5)
+    assert not worker.is_alive()
+    posted_result = result["post"]
+    assert isinstance(posted_result, tuple)
+    post_status, post_body, _post_location = posted_result
+    assert post_status == 200
+    assert "SKILL GRAPH" in post_body
+    assert "engine offline" in post_body
+
+
+def test_harborline_demo_action_returns_role_board(server) -> None:
+    posted = urlencode(
+        {"product": "role", "text": "", "project": "default", "action": "demo"}
+    )
+    status, body, _location = _http(server, "POST", "/", body=posted)
+    assert status == 200
+    assert "Account Executive" in body
+    assert "SKILL GRAPH" in body
+    assert "LEARNING OBJECTIVES" in body
+    assert "30-MINUTE MODULE" in body
+    assert "APPLICATION QUIZ" in body
+    assert "Harborline Payments" in body
+    assert "EXAMPLE DATA" in body
+    assert "engine offline" in body
+    assert 'type="radio"' not in body
+    store = Store(default_db_path())
+    assert len(store.list_runs()) == 1
+    assert store.list_runs()[0].engine.value == "offline"
 
 
 def test_serve_help_exists(capsys) -> None:
