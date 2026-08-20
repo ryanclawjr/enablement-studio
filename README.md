@@ -62,7 +62,7 @@ The three demo fixtures are labeled **EXAMPLE DATA**. Harborline Payments, Maple
 
 ## Optional LLM
 
-The default engine is offline and deterministic. To try an LLM, set `ENABLEMENT_LLM_API_KEY` (or `OPENAI_API_KEY`) and optionally `ENABLEMENT_LLM_BASE_URL` and `ENABLEMENT_LLM_MODEL`. If the call fails or the JSON does not match the schema, the CLI falls back to the offline engine. Demos and CI leave these unset.
+The default engine is offline and deterministic. To try an LLM, set `ENABLEMENT_LLM_API_KEY` (or `OPENAI_API_KEY`) and optionally `ENABLEMENT_LLM_BASE_URL` and `ENABLEMENT_LLM_MODEL`. The hook is OpenAI-shaped: `POST {base}/chat/completions` with `temperature` 0 and `response_format` `json_object`. No reasoning / `reasoning_effort` / thinking fields. Default model is `gpt-4.1-mini`. Default base is `https://api.openai.com/v1`. Timeout is 20 seconds — Harborline Role JSON is about 6KB of structured output, and 8 seconds was tight. Each product has its own system prompt that names the existing JSON shape and the PRODUCT.md rules. If the call fails or the JSON does not match the schema, the CLI falls back to the offline engine. Demos and CI leave these unset.
 
 ## Layout
 
@@ -71,6 +71,7 @@ src/enablement_studio/
   role/      # Role → Enablement
   call/      # Call → Coach
   critic/    # Lesson critic
+  prompts.py # Per-product LLM system prompts
   store/     # SQLite projects, runs, artifacts
 fixtures/    # Fictional demo inputs
 data/        # schema.sql; enablement.db created locally

@@ -17,15 +17,37 @@ from enablement_studio.models import (
     critic_from_dict,
     role_from_dict,
 )
+from enablement_studio.prompts import system_prompt
 from enablement_studio.role import apply_title_swap_validity, generate_role
 
 LLM_KEY_ENV = "ENABLEMENT_LLM_API_KEY"
 LLM_BASE_ENV = "ENABLEMENT_LLM_BASE_URL"
 LLM_MODEL_ENV = "ENABLEMENT_LLM_MODEL"
+DEFAULT_MODEL = "gpt-4.1-mini"
+DEFAULT_BASE_URL = "https://api.openai.com/v1"
+LLM_TIMEOUT_SECONDS = 20
 
 
 def llm_configured() -> bool:
     return bool(os.environ.get(LLM_KEY_ENV) or os.environ.get("OPENAI_API_KEY"))
+
+
+def llm_endpoint() -> str:
+    base = os.environ.get(LLM_BASE_ENV, DEFAULT_BASE_URL).rstrip("/")
+    return f"{base}/chat/completions"
+
+
+def llm_chat_body(product: Product, text: str) -> dict[str, Any]:
+    model = os.environ.get(LLM_MODEL_ENV, DEFAULT_MODEL)
+    return {
+        "model": model,
+        "temperature": 0,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": system_prompt(product)},
+            {"role": "user", "content": f"product={product.value}\n\n{text}"},
+        ],
+    }
 
 
 def generate(product: Product, text: str) -> tuple[ProductOutput, EngineName]:
@@ -65,33 +87,9 @@ def _offline(product: Product, text: str) -> ProductOutput:
 
 def _llm_json(product: Product, text: str) -> dict[str, Any]:
     api_key = os.environ.get(LLM_KEY_ENV) or os.environ.get("OPENAI_API_KEY") or ""
-    base = os.environ.get(LLM_BASE_ENV, "https://api.openai.com/v1").rstrip("/")
-    model = os.environ.get(LLM_MODEL_ENV, "gpt-4.1-mini")
-    body = json.dumps(
-        {
-            "model": model,
-            "temperature": 0,
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "Return only JSON for an instructional-design specialist. "
-                        "Do not invent live employer metrics. Mark example_data true "
-                        "if the source is labeled example or fictional. "
-                        "For product=role, extract skills from this source. "
-                        "Enablement, L&D, or coaching jobs are not seller modules."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": f"product={product.value}\n\n{text}",
-                },
-            ],
-        }
-    ).encode("utf-8")
+    body = json.dumps(llm_chat_body(product, text)).encode("utf-8")
     request = urllib.request.Request(
-        f"{base}/chat/completions",
+        llm_endpoint(),
         data=body,
         headers={
             "Content-Type": "application/json",
@@ -99,7 +97,7 @@ def _llm_json(product: Product, text: str) -> dict[str, Any]:
         },
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=8) as response:
+    with urllib.request.urlopen(request, timeout=LLM_TIMEOUT_SECONDS) as response:
         raw = json.loads(response.read().decode("utf-8"))
     content = raw["choices"][0]["message"]["content"]
     parsed = json.loads(content)
