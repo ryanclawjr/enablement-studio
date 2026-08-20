@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from enum import Enum
 from typing import Any
+
+from enablement_studio.textutil import clamp
 
 
 SOURCE_NOTE = (
@@ -182,22 +184,51 @@ def _require(data: dict[str, Any], *keys: str) -> None:
         raise ValueError(f"missing keys: {missing}")
 
 
+def _known_kwargs(cls: type, data: Any) -> dict[str, Any]:
+    if not isinstance(data, dict):
+        raise TypeError(f"expected object for {cls.__name__}")
+    allowed = {item.name for item in fields(cls)}
+    return {key: data[key] for key in data if key in allowed}
+
+
+def _score_int(value: Any) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        raise TypeError("score must be an int")
+    if isinstance(value, str):
+        value = int(value)
+    return clamp(int(value))
+
+
+def alignment_scores_from_dict(data: Any) -> AlignmentScores:
+    raw = _known_kwargs(AlignmentScores, data)
+    objective = _score_int(raw.get("objective_clarity"))
+    activity = _score_int(raw.get("activity_alignment"))
+    assessment = _score_int(raw.get("assessment_alignment"))
+    overall = clamp(round((objective + activity + assessment) / 3))
+    return AlignmentScores(objective, activity, assessment, overall)
+
+
 def role_from_dict(data: dict[str, Any]) -> RoleEnablement:
     _require(data, "role_title", "skill_graph", "objectives", "outline", "practice", "quiz")
     graph = data["skill_graph"]
+    if not isinstance(graph, dict):
+        raise TypeError("skill_graph must be an object")
     practice = data["practice"]
     return RoleEnablement(
         example_data=bool(data.get("example_data", False)),
         source_note=str(data.get("source_note", SOURCE_NOTE)),
         role_title=str(data["role_title"]),
         skill_graph=SkillGraph(
-            nodes=[SkillNode(**node) for node in graph["nodes"]],
-            edges=[SkillEdge(**edge) for edge in graph["edges"]],
+            nodes=[SkillNode(**_known_kwargs(SkillNode, node)) for node in graph["nodes"]],
+            edges=[SkillEdge(**_known_kwargs(SkillEdge, edge)) for edge in graph["edges"]],
         ),
-        objectives=[LearningObjective(**item) for item in data["objectives"]],
-        outline=[ModuleBlock(**item) for item in data["outline"]],
-        practice=PracticeActivity(**practice),
-        quiz=[QuizItem(**item) for item in data["quiz"]],
+        objectives=[
+            LearningObjective(**_known_kwargs(LearningObjective, item))
+            for item in data["objectives"]
+        ],
+        outline=[ModuleBlock(**_known_kwargs(ModuleBlock, item)) for item in data["outline"]],
+        practice=PracticeActivity(**_known_kwargs(PracticeActivity, practice)),
+        quiz=[QuizItem(**_known_kwargs(QuizItem, item)) for item in data["quiz"]],
         invalid=bool(data.get("invalid", False)),
     )
 
@@ -210,8 +241,8 @@ def call_from_dict(data: dict[str, Any]) -> CallCoaching:
         call_title=str(data["call_title"]),
         speakers=[str(item) for item in data.get("speakers", [])],
         signals=[str(item) for item in data.get("signals", [])],
-        notes=[AgentNote(**item) for item in data["notes"]],
-        enablement_fix=EnablementFix(**data["enablement_fix"]),
+        notes=[AgentNote(**_known_kwargs(AgentNote, item)) for item in data["notes"]],
+        enablement_fix=EnablementFix(**_known_kwargs(EnablementFix, data["enablement_fix"])),
     )
 
 
@@ -221,9 +252,12 @@ def critic_from_dict(data: dict[str, Any]) -> LessonCritique:
         example_data=bool(data.get("example_data", False)),
         source_note=str(data.get("source_note", SOURCE_NOTE)),
         lesson_title=str(data["lesson_title"]),
-        scores=AlignmentScores(**data["scores"]),
-        findings=[CritiqueFinding(**item) for item in data.get("findings", [])],
-        rewrite=Rewrite(**data["rewrite"]),
+        scores=alignment_scores_from_dict(data["scores"]),
+        findings=[
+            CritiqueFinding(**_known_kwargs(CritiqueFinding, item))
+            for item in data.get("findings", [])
+        ],
+        rewrite=Rewrite(**_known_kwargs(Rewrite, data["rewrite"])),
     )
 
 

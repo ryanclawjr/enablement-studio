@@ -40,16 +40,17 @@ DEMO_FILES = {
 
 
 def find_fixture(filename: str) -> Path:
-    candidates = [
-        Path.cwd() / "fixtures" / filename,
-        Path(__file__).resolve().parent / "fixtures" / filename,
-    ]
+    packaged = Path(__file__).resolve().parent / "fixtures" / filename
+    if packaged.is_file():
+        return packaged
     root = repo_root()
     if root is not None:
-        candidates.append(root / "fixtures" / filename)
-    for path in candidates:
-        if path.is_file():
-            return path
+        checked_in = root / "fixtures" / filename
+        if checked_in.is_file():
+            return checked_in
+    cwd = Path.cwd() / "fixtures" / filename
+    if cwd.is_file():
+        return cwd
     raise FileNotFoundError(f"fixture not found: {filename}")
 
 

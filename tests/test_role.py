@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enablement_studio.paths import find_fixture
 from enablement_studio.role import generate_role
 from enablement_studio.textutil import extract_bullets
 
@@ -39,6 +40,29 @@ def test_extract_bullets_joins_wrapped_lines() -> None:
     bullets = extract_bullets(text)
     assert any("just-in-time" in item for item in bullets)
     assert any("knowledge gaps" in item for item in bullets)
+
+
+def test_nurse_and_id_quiz_are_readable_statements() -> None:
+    nurse = generate_role(
+        find_fixture("eval_nurse_educator_job.txt").read_text(encoding="utf-8")
+    )
+    designer = generate_role(
+        find_fixture("eval_instructional_designer_job.txt").read_text(encoding="utf-8")
+    )
+    nurse_blob = " ".join(
+        [item.statement for item in nurse.objectives]
+        + nurse.practice.instructions
+        + [item.question for item in nurse.quiz]
+    ).lower()
+    designer_blob = " ".join(
+        [item.statement for item in designer.objectives]
+        + designer.practice.instructions
+        + [item.question for item in designer.quiz]
+    ).lower()
+    assert "demonstrate coach" not in nurse_blob
+    assert "demonstrate facilitate" not in designer_blob
+    assert any("coach new hires" in item.statement.lower() for item in nurse.objectives)
+    assert any("facilitate a pilot" in item.statement.lower() for item in designer.objectives)
 
 
 def test_role_rejects_empty() -> None:

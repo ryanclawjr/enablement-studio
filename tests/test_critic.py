@@ -56,6 +56,63 @@ def test_aligned_interchange_lesson_is_not_a_miss() -> None:
     assert "interchange" in rewrite
 
 
+def test_same_verb_wrong_object_is_not_aligned() -> None:
+    text = """
+    EXAMPLE DATA — fictional lesson.
+    Title: Pallet-jack safety
+    ## Learning objective
+    Given a loaded pallet in a warehouse aisle, the learner will demonstrate
+    safe pallet-jack travel, as measured by a skills-lab checklist.
+    ## Activity
+    Demonstrate a discovery call with a cautious buyer about weekend cash.
+    ## Assessment
+    Demonstrate a discovery call with a cautious buyer about weekend cash.
+    """
+    result = generate_critic(text)
+    assert result.scores.activity_alignment < 4
+    assert result.scores.assessment_alignment < 4
+    rewrite = result.rewrite.replacement.lower()
+    assert "pallet" in rewrite or "warehouse" in rewrite
+    assert "buyer" not in rewrite
+    assert "weekend cash" not in rewrite
+    assert "closes close" not in rewrite
+
+
+def test_rewrite_listener_comes_from_objective_not_activity() -> None:
+    text = """
+    EXAMPLE DATA — fictional lesson.
+    Title: Explain interchange
+    ## Learning objective
+    The learner will explain interchange using the authorization and settlement path.
+    ## Activity
+    Demonstrate safe pallet-jack travel in a warehouse aisle.
+    ## Assessment
+    What time does the cafeteria open?
+    """
+    result = generate_critic(text)
+    rewrite = result.rewrite.replacement.lower()
+    assert "interchange" in rewrite
+    assert "warehouse associate" not in rewrite
+    assert "buyer" not in rewrite
+
+
+def test_rewrite_is_a_readable_sentence() -> None:
+    text = """
+    EXAMPLE DATA — fictional lesson.
+    Title: Close
+    ## Learning objective
+    The learner will close a mutual plan on a live call.
+    ## Activity
+    Watch a video.
+    ## Assessment
+    Attendance.
+    """
+    result = generate_critic(text)
+    replacement = result.rewrite.replacement.lower()
+    assert "closes close" not in replacement
+    assert "close a mutual plan on a live call" in replacement
+
+
 def test_pallet_jack_rewrite_stays_warehouse() -> None:
     text = find_fixture("eval_pallet_jack_lesson.md").read_text(encoding="utf-8")
     result = generate_critic(text)

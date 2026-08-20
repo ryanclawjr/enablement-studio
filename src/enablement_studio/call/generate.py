@@ -58,6 +58,25 @@ _SALES_HINTS = (
     "account executive",
     "discount",
 )
+_PAYMENTS_HINTS = (
+    "processor",
+    "interchange",
+    "merchant",
+    "rate card",
+    "chargeback",
+    "payout",
+    "harborline",
+    "card-present",
+    "2.4 percent",
+    "2.4%",
+)
+
+
+def _is_payments(source: str) -> bool:
+    hay = source.lower()
+    if re.search(r"\bpayments?\b", hay):
+        return True
+    return any(token in hay for token in _PAYMENTS_HINTS)
 
 
 def generate_call(text: str) -> CallCoaching:
@@ -263,13 +282,22 @@ def _notes(
         ]
     pitched = any("price" in signal.lower() and "before" in signal.lower() for signal in signals)
     if pitched:
+        if _is_payments(source):
+            next_drill = (
+                f"Next live call, ask {buyer} three questions about how money moves today "
+                "before you mention a rate. Write the answers where your manager can see them."
+            )
+        else:
+            next_drill = (
+                f"Next live call, ask {buyer} three questions about how they work today "
+                "before you mention a price. Write the answers where your manager can see them."
+            )
         learner = AgentNote(
             "learner",
             "You pitched before you earned the right",
             (
                 f"{seller} on '{title}': {lead} "
-                f"Next live call, ask {buyer} three questions about how money moves today "
-                "before you mention a rate. Write the answers where your manager can see them."
+                f"{next_drill}"
             ),
         )
         customer = AgentNote(
@@ -340,12 +368,23 @@ def _fix(signals: list[str], kind: str, source: str) -> EnablementFix:
             measure="Observer checklist on the next practice, not a CRM log.",
         )
     if any("Price" in signal or "price" in signal for signal in signals):
+        if _is_payments(source):
+            return EnablementFix(
+                title="Discovery-before-rate drill",
+                problem="Sellers open with promo pricing, so buyers never feel heard.",
+                fix=(
+                    "Ship a 10-minute paired drill: three current-process questions, "
+                    "one restatement of pain, then—and only then—a rate card. "
+                    "Managers score a 4-item checklist."
+                ),
+                measure="On the next three recorded calls, price talk starts after minute six.",
+            )
         return EnablementFix(
-            title="Discovery-before-rate drill",
-            problem="Sellers open with promo pricing, so buyers never feel heard.",
+            title="Discovery-before-price drill",
+            problem="Sellers open with price, so the other person never feels heard.",
             fix=(
                 "Ship a 10-minute paired drill: three current-process questions, "
-                "one restatement of pain, then—and only then—a rate card. "
+                "one restatement of pain, then—and only then—price. "
                 "Managers score a 4-item checklist."
             ),
             measure="On the next three recorded calls, price talk starts after minute six.",

@@ -61,6 +61,22 @@ def test_eval_family_fixtures_are_example_data() -> None:
             assert banned not in text, f"{name}: {banned}"
 
 
+def test_cwd_fixture_does_not_shadow_package(tmp_path: Path, monkeypatch) -> None:
+    from enablement_studio.paths import demo_text, find_fixture
+
+    fixtures = tmp_path / "fixtures"
+    fixtures.mkdir()
+    decoy = fixtures / "example_account_executive_job.txt"
+    decoy.write_text("EXAMPLE DATA — cwd decoy, not Harborline.\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    path = find_fixture("example_account_executive_job.txt")
+    text = path.read_text(encoding="utf-8")
+    assert "Harborline" in text
+    assert "cwd decoy" not in text
+    assert "Harborline" in demo_text("role")
+    assert path != decoy
+
+
 def test_repo_and_package_fixtures_match() -> None:
     repo = Path(__file__).resolve().parents[1]
     packaged = repo / "src/enablement_studio/fixtures"

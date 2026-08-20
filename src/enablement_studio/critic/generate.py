@@ -127,8 +127,14 @@ def _alignment_score(
     shared_verbs = (objective_terms & other_terms) & _BLOOM
     verb_hit = bool(verb and (verb in other_lower or verb in other_terms))
     overlap = len(objective_terms & other_terms)
-    if verb_hit or shared_verbs:
+    object_terms = objective_terms - _BLOOM
+    other_objects = other_terms - _BLOOM
+    object_overlap = object_terms & other_objects
+    # Same verb on a different skill is a miss. Verb-only hit was the hole.
+    if (verb_hit or shared_verbs) and object_overlap:
         return 5 if overlap >= 3 else 4
+    if verb_hit or shared_verbs:
+        return 2
     if overlap == 0:
         return 1
     if overlap <= 2:
@@ -201,14 +207,14 @@ def _rewrite(
         ("objective", scores.objective_clarity, objective_text),
     ]
     target, score, _original = min(named, key=lambda item: item[1])
-    verb = _stated_verb(objective_text) or "explain"
-    topic = _topic(objective_text) or title
-    hay = f"{title}\n{objective_text}\n{activity_text}\n{assess_text}".lower()
-    listener, cue = _listener_and_cue(hay, topic)
+    verb, obj = _verb_and_object(objective_text, title)
+    # Listener/domain from the objective (or title), not a misaligned activity.
+    hay = f"{title}\n{objective_text}".lower()
+    listener, cue = _listener_and_cue(hay, _topic(objective_text) or obj)
     if target == "activity":
         replacement = (
             f"## Activity (rewrite)\n"
-            f"Paired teach-back (8 minutes): one learner {verb}s {topic} "
+            f"Paired teach-back (8 minutes): one learner must {verb} {obj} "
             f"to {listener}. The partner only asks '{cue}' Swap roles. "
             "Facilitator scores a 3-item rubric: accuracy, plain language, one next question."
         )
@@ -216,7 +222,7 @@ def _rewrite(
     elif target == "assessment":
         replacement = (
             f"## Assessment (rewrite)\n"
-            f"1. In 90 seconds, {verb} {topic} to {listener}.\n"
+            f"1. In 90 seconds, {verb} {obj} to {listener}.\n"
             f"2. Name the cue that tells you they understood.\n"
             "3. What is the one next question you will ask in the next practice?"
         )
@@ -225,7 +231,7 @@ def _rewrite(
         replacement = (
             f"## Learning objective (rewrite)\n"
             f"Given a realistic practice with {listener}, the learner will "
-            f"{verb} {topic} in plain language, as measured by a 90-second teach-back "
+            f"{verb} {obj} in plain language, as measured by a 90-second teach-back "
             "scored on accuracy, clarity, and one relevant follow-up question."
         )
         reason = "The objective needs a condition, a verb, and an observable measure."
@@ -242,6 +248,22 @@ def _listener_and_cue(hay: str, topic: str) -> tuple[str, str]:
     if "buyer" in hay:
         return "a buyer", "what is the one next question on a live call?"
     return "a colleague", f"what does {topic} change in the work?"
+
+
+def _verb_and_object(objective_text: str, fallback: str) -> tuple[str, str]:
+    match = re.search(r"will (?:be able to )?(\w+)\s+(.+)", objective_text, flags=re.I)
+    if match:
+        verb = match.group(1).lower()
+        rest = match.group(2).strip()
+        rest = re.split(r",\s*as measured\b|\bas measured\b", rest, maxsplit=1, flags=re.I)[0]
+        rest = rest.strip(" .,")
+        if rest:
+            return verb, rest
+    verb = _stated_verb(objective_text) or "explain"
+    topic = _topic(objective_text) or fallback
+    if topic == verb or topic.startswith(f"{verb} "):
+        return verb, topic
+    return verb, topic
 
 
 def _topic(objective_text: str) -> str:

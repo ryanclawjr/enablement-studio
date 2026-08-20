@@ -35,8 +35,8 @@ The module trains the person who will do **this** job. It does not decorate a ge
 ### Rules
 
 1. The skill graph is for this job. Extract skills from the source text. Do not stamp a generic account-executive / discovery / price template onto every title.
-2. If the job is an enablement, L&D, or coaching role, the learner is a person doing that job. In-scope work includes gap analysis, onboarding design, technical packaging, launch readiness, and impact metrics. Do not treat every JD as "train this person to sell."
-3. If the job is a seller, SE, or SA in the field, seller skills are in-bounds: discovery, demo, objection handling, and the like.
+2. If the job is an enablement, L&D, or coaching role, the learner is a person doing that job. That family includes instructional design, customer education, nurse / clinical / patient educator, nursing-education leadership, and director of education. In-scope work includes gap analysis, onboarding design, technical packaging, launch readiness, and impact metrics. Do not treat every JD as "train this person to sell."
+3. If the job is a seller, SE, or SA in the field, seller skills are in-bounds: discovery, demo, objection handling, and the like. Practice and objective nouns come from the source (operators, integration, architecture). Buyer / cautious-buyer lines only if the source has those nouns.
 4. Every objective verb must appear in the graph. Practice and quiz must measure those same verbs.
 5. Fail the run, or mark it invalid, if the module could be reused on a random AE job by swapping the title. That check is the title-swap test.
 6. Known failure (public posting, not an application): Stripe Solution Architect Enablement Business Partner, Greenhouse 8115022, listed at [stripe.com/careers](https://stripe.com/careers/listing/solution-architect-enablement-business-partner/8115022). Offline v0 kept AE discovery, price, and CRM next-step quiz items after swapping in the title. A passing Role run on that JD talks about SA onboarding, technical packaging for a sales audience, launch readiness, and enablement impact metrics.
@@ -62,7 +62,7 @@ Output already exists on `CallCoaching`.
 - Do not invent speakers or facts that are not in the source.
 - The fix is a drill or artifact a manager can run, plus a measure.
 
-Speakers come from the transcript. A call that never mentions price does not get a discovery-before-rate drill unless a listed signal justifies it. A note that invents a buyer problem the transcript never stated is a miss.
+Speakers come from the transcript. A call that never mentions price does not get a discovery-before-rate drill unless a listed signal justifies it. Payments voice (how money moves, rate card) only if the source is payments. A note that invents a buyer problem the transcript never stated is a miss.
 
 ## Lesson critic
 
@@ -74,7 +74,7 @@ Output already exists on `LessonCritique`.
 - Findings explain the scores.
 - Rewrite the weakest part so the activity or assessment practices the same verb as the objective.
 
-A scavenger-hunt activity against "explain interchange" fails alignment. The rewrite must make the learner practice that verb, not a different one, and not a logistics check.
+A scavenger-hunt activity against "explain interchange" fails alignment. Same verb on a different object also fails (pallet-jack vs a buyer discovery call). The rewrite must make the learner practice that verb on that skill, in the objective's domain, as a readable sentence.
 
 ## Eval
 

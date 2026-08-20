@@ -33,6 +33,55 @@ _LEVEL_VERBS = {
     "performance": "run",
 }
 _SA_RE = re.compile(r"\bsa teams?\b|solution architect", re.I)
+_LEADING_VERBS = frozenset(
+    {
+        "assess",
+        "check",
+        "close",
+        "coach",
+        "collect",
+        "design",
+        "diagnose",
+        "demonstrate",
+        "describe",
+        "explain",
+        "facilitate",
+        "handle",
+        "identify",
+        "inspect",
+        "leave",
+        "log",
+        "map",
+        "measure",
+        "move",
+        "negotiate",
+        "operate",
+        "pack",
+        "package",
+        "pair",
+        "perform",
+        "pick",
+        "prepare",
+        "prototype",
+        "record",
+        "report",
+        "retire",
+        "revise",
+        "run",
+        "schedule",
+        "score",
+        "set",
+        "stop",
+        "teach",
+        "tie",
+        "train",
+        "write",
+    }
+)
+_NAME_TRAILING = re.compile(
+    r"\b(?:and|or|the|a|an|to|for|from|they|then|with|of|in|on)$",
+    flags=re.I,
+)
 
 
 @dataclass(frozen=True)
@@ -273,7 +322,12 @@ def _has_sa(source: str) -> bool:
 
 def _audience_phrase(family: JobFamily, source: str) -> str:
     if family is JobFamily.SELLER:
-        return "in language a buyer can use"
+        hay = source.lower()
+        if source_mentions(source, "buyer", "prospect"):
+            return "in language a buyer can use"
+        if "operator" in hay:
+            return "in language operators can use"
+        return "in language the other person can use"
     hay = source.lower()
     if _has_sa(source):
         return "for the SA teams they support"
@@ -286,6 +340,22 @@ def _audience_phrase(family: JobFamily, source: str) -> str:
     if "learner" in hay:
         return "for the learners they support"
     return "for the people they support"
+
+
+def _seller_counterpart(source: str) -> str:
+    if source_mentions(source, "buyer", "prospect"):
+        return "a cautious buyer"
+    if "operator" in source.lower():
+        return "an operator"
+    return "the other person"
+
+
+def _seller_fact_noun(source: str) -> str:
+    if source_mentions(source, "buyer", "prospect"):
+        return "buyer facts"
+    if "operator" in source.lower():
+        return "operator facts"
+    return "facts already named"
 
 
 def _audience_noun(source: str) -> str:
@@ -341,13 +411,12 @@ def _skill_graph(
         for bullet in bullets:
             if _is_requirement_bullet(bullet) or _bullet_covered(bullet, matched):
                 continue
-            name = _skill_name_from_bullet(bullet)
+            verb, name = _skill_from_bullet(bullet, "core" if terms else "foundation")
             if any(name.lower() == seed.name.lower() for seed in matched):
                 continue
             if any(name.lower() == node.name.lower() for node in extra_nodes):
                 continue
             level = "core" if terms else "foundation"
-            verb = _LEVEL_VERBS[level]
             extra_nodes.append(
                 SkillNode(
                     id=slug(name),
@@ -431,12 +500,31 @@ def _bullet_covered(bullet: str, matched: list[SkillSeed]) -> bool:
     )
 
 
-def _skill_name_from_bullet(bullet: str) -> str:
+def _skill_from_bullet(bullet: str, level: str) -> tuple[str, str]:
     cleaned = re.sub(r"^(?:must|should|will|able to)\s+", "", bullet, flags=re.I)
-    cleaned = re.sub(r"[.]+$", "", cleaned)
-    if len(cleaned) > 48:
-        cleaned = cleaned[:45].rsplit(" ", 1)[0]
-    return cleaned[0].upper() + cleaned[1:]
+    cleaned = re.sub(r"[.]+$", "", cleaned).strip()
+    if not cleaned:
+        return _LEVEL_VERBS[level], "Source skill"
+    first = cleaned.split(None, 1)[0].lower()
+    verb = first if first in _LEADING_VERBS else _LEVEL_VERBS[level]
+    return verb, _readable_skill_name(cleaned)
+
+
+def _readable_skill_name(cleaned: str) -> str:
+    name = cleaned
+    if len(name) > 80:
+        name = name[:80].rsplit(" ", 1)[0]
+        name = _NAME_TRAILING.sub("", name).strip()
+    if not name:
+        name = cleaned[:80].strip()
+    return name[0].upper() + name[1:]
+
+
+def _verb_complement(verb: str, node: SkillNode, source: str) -> str:
+    focus_object = _focus_object(node, source)
+    if focus_object == verb or focus_object.startswith(f"{verb} "):
+        return focus_object
+    return f"{verb} {focus_object}"
 
 
 def _dedupe_nodes(nodes: list[SkillNode]) -> list[SkillNode]:
@@ -449,6 +537,12 @@ def _dedupe_nodes(nodes: list[SkillNode]) -> list[SkillNode]:
 
 def _article(title: str) -> str:
     return "an" if title[:1].lower() in {"a", "e", "i", "o", "u"} else "a"
+
+
+def _cap(text: str) -> str:
+    if not text:
+        return text
+    return text[0].upper() + text[1:]
 
 
 def _focus(
@@ -507,10 +601,10 @@ def _objectives(
         raise ValueError(f"unsupported job family: {never}")
     objectives: list[LearningObjective] = []
     for index, (verb, node) in enumerate(focus, start=1):
-        focus_object = _focus_object(node, source)
+        complement = _verb_complement(verb, node, source)
         statement = (
-            f"Given a realistic {title} scenario, the learner will {verb} "
-            f"{focus_object} {audience}."
+            f"Given a realistic {title} scenario, the learner will {complement} "
+            f"{audience}."
         )
         objectives.append(
             LearningObjective(
@@ -579,7 +673,7 @@ def _practice(
     context = bullets[0] if bullets else f"a typical {title} conversation"
     if family is JobFamily.ENABLEMENT:
         instructions = [
-            f"{verb.capitalize()} {_focus_object(node, source)} from this source cue."
+            f"{_cap(_verb_complement(verb, node, source))} from this source cue."
             for verb, node in focus[:3]
         ]
         if not instructions:
@@ -607,23 +701,26 @@ def _practice(
             ],
         )
     if family is JobFamily.SELLER:
+        counterpart = _seller_counterpart(source)
+        fact_noun = _seller_fact_noun(source)
+        restater = "Buyer" if source_mentions(source, "buyer", "prospect") else "The other person"
         return PracticeActivity(
             title=f"12-minute {skill} drill",
             scenario=(
-                f"You are {_article(title)} {title}. The other person is a cautious buyer. "
+                f"You are {_article(title)} {title}. The other person is {counterpart}. "
                 f"Source cue (example or user text): {context}"
             ),
             instructions=[
                 "Spend the first four minutes only on questions. No product claims.",
-                f"Map two buyer facts to {skill} before you propose anything.",
-                "Close on one dated next step the buyer repeats back.",
+                f"Map two {fact_noun} to {skill} before you propose anything.",
+                "Close on one dated next step the other person repeats back.",
                 f"Observer checks the learner can {verb_list}.",
             ],
             success_criteria=[
                 "At least four open questions before any price or feature talk."
                 if source_mentions(source, "price", "pricing")
                 else "At least four open questions before any product claim.",
-                "Buyer can restate the problem in their own words.",
+                f"{restater} can restate the problem in their own words.",
                 "Next step has an owner and a date.",
                 f"Verbs on the checklist: {verb_list}.",
             ],
@@ -636,7 +733,7 @@ def _practice(
                 f"Source cue: {context}"
             ),
             instructions=[
-                f"{verb.capitalize()} {_focus_object(node, source)} from this source cue."
+                f"{_cap(_verb_complement(verb, node, source))} from this source cue."
                 for verb, node in focus[:3]
             ]
             or ["Practice the next step named in the source."],
@@ -683,7 +780,7 @@ def _quiz_enablement(
     distractors = _stock_choices(source)
     sa = _has_sa(source)
     for verb, node in focus[:3]:
-        focus_object = _focus_object(node, source)
+        complement = _verb_complement(verb, node, source)
         answer = (
             f"{verb.capitalize()} from SA evidence in the field"
             if sa
@@ -691,10 +788,10 @@ def _quiz_enablement(
         )
         items.append(
             QuizItem(
-                f"Which move best lets {_article(title)} {title} {verb} {focus_object}?",
+                f"Which move best lets {_article(title)} {title} {complement}?",
                 [answer, *distractors[:3]],
                 answer,
-                f"The module measures the verb {verb} on {focus_object}.",
+                f"The module measures the verb {verb} on {complement}.",
             )
         )
     if any(node.id == "impact-metrics" for _, node in focus) or source_mentions(
@@ -746,13 +843,14 @@ def _quiz_seller(
         )
     elif focus:
         verb, node = focus[0]
-        answer = f"{verb.capitalize()} {node.name.lower()} from facts already named"
+        complement = _verb_complement(verb, node, source)
+        answer = f"{_cap(complement)} from facts already named"
         items.append(
             QuizItem(
-                f"Which move best lets {_article(title)} {title} {verb} {node.name.lower()}?",
+                f"Which move best lets {_article(title)} {title} {complement}?",
                 [answer, *_stock_choices(source)[:3]],
                 answer,
-                f"The module measures the verb {verb} on {node.name.lower()}.",
+                f"The module measures the verb {verb} on {complement}.",
             )
         )
     if source_mentions(source, "crm"):
@@ -818,14 +916,14 @@ def _quiz_source(
     distractors = _stock_choices(source)
     items: list[QuizItem] = []
     for verb, node in focus[:3]:
-        focus_object = _focus_object(node, source)
+        complement = _verb_complement(verb, node, source)
         answer = f"{verb.capitalize()} the source step: {node.name.lower()}"
         items.append(
             QuizItem(
-                f"Which move best lets someone in {title} {verb} {focus_object}?",
+                f"Which move best lets someone in {title} {complement}?",
                 [answer, *distractors[:3]],
                 answer,
-                f"The module measures the verb {verb} on {focus_object}.",
+                f"The module measures the verb {verb} on {complement}.",
             )
         )
     if not items:
