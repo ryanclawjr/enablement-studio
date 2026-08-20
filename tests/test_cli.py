@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 
 from enablement_studio.cli import main
+from enablement_studio.models import Product
+from enablement_studio.paths import default_db_path, find_fixture
 from enablement_studio.store import Store
-from enablement_studio.paths import default_db_path
 
 
 def test_three_demo_commands(capsys) -> None:
@@ -69,3 +70,20 @@ def test_missing_run_is_an_error(capsys) -> None:
 
 def test_role_requires_input() -> None:
     assert main(["role"]) == 2
+
+
+def test_cli_role_stripe_eval_is_enablement(capsys) -> None:
+    path = find_fixture("eval_stripe_sa_enablement_job.txt")
+    assert main(["role", "--file", str(path), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["invalid"] is False
+    blob = json.dumps(payload).lower()
+    assert "before presenting price" not in blob
+    assert "buyer facts written in the crm" not in blob
+    assert "onboarding" in blob
+    assert "gap analysis" in blob
+    assert "launch readiness" in blob
+    store = Store(default_db_path())
+    runs = store.list_runs(product=Product.ROLE)
+    assert runs
+    assert runs[-1].invalid is False

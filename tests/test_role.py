@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enablement_studio.role import generate_role
+from enablement_studio.textutil import extract_bullets
 
 
 def test_role_fixture_is_complete(job_text: str) -> None:
@@ -27,6 +28,17 @@ def test_role_title_follows_input() -> None:
     assert sales.role_title != support.role_title
     assert "Account Executive" in sales.role_title
     assert "Onboarding Specialist" in support.role_title
+
+
+def test_extract_bullets_joins_wrapped_lines() -> None:
+    text = (
+        "- Design onboarding programs, ongoing training, and\n"
+        "  just-in-time learning resources for SA teams\n"
+        "- Identify skill and knowledge gaps\n"
+    )
+    bullets = extract_bullets(text)
+    assert any("just-in-time" in item for item in bullets)
+    assert any("knowledge gaps" in item for item in bullets)
 
 
 def test_role_rejects_empty() -> None:

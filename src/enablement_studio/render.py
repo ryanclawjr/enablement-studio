@@ -33,9 +33,10 @@ def render_run_list(runs: list[SavedRun]) -> str:
         "-" * 72,
     ]
     for run in runs:
+        title = f"[invalid] {run.title}" if run.invalid else run.title
         lines.append(
             f"{run.id:<5} {run.product.value:<8} {run.version:<4} "
-            f"{run.engine.value:<8} {run.project:<12} {run.title}"
+            f"{run.engine.value:<8} {run.project:<12} {title}"
         )
     return "\n".join(lines) + "\n"
 
@@ -89,6 +90,8 @@ def _header(output: ProductOutput, run: SavedRun | None) -> str:
     if not output.example_data:
         banner = output.source_note
     lines = [f"Enablement Studio — {product_label(product)}", banner, title]
+    if isinstance(output, RoleEnablement) and output.invalid:
+        lines.append("INVALID — title-swap test failed. Not a successful Role run.")
     if run is not None:
         lines.append(
             f"Run {run.id}  ·  project {run.project}  ·  v{run.version}  ·  {run.engine.value}"

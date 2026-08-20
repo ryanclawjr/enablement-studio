@@ -29,3 +29,8 @@ def call_text() -> str:
 @pytest.fixture
 def lesson_text() -> str:
     return find_fixture("example_new_hire_lesson.md").read_text(encoding="utf-8")
+
+
+@pytest.fixture
+def stripe_enablement_text() -> str:
+    return find_fixture("eval_stripe_sa_enablement_job.txt").read_text(encoding="utf-8")

@@ -74,9 +74,20 @@ _ROSTER_SPEAKERS = {
 }
 
 
+PUBLIC_POSTING_MARKERS = (
+    "PUBLIC POSTING",
+    "PUBLIC JOB POSTING",
+)
+
+
 def is_example_data(text: str) -> bool:
     head = text[:1200].upper()
     return any(marker in head for marker in EXAMPLE_MARKERS)
+
+
+def is_public_posting(text: str) -> bool:
+    head = text[:1200].upper()
+    return any(marker in head for marker in PUBLIC_POSTING_MARKERS)
 
 
 def first_non_banner_line(text: str) -> str:
@@ -116,11 +127,29 @@ def _clean_title(value: str) -> str:
 
 def extract_bullets(text: str) -> list[str]:
     seen: list[str] = []
-    for match in _BULLET_RE.finditer(text):
-        item = re.sub(r"\s+", " ", match.group(1)).strip()
-        if item and item not in seen:
-            seen.append(item)
+    current: str | None = None
+    for raw in text.splitlines():
+        match = _BULLET_RE.match(raw)
+        if match:
+            if current:
+                _push_unique(seen, current)
+            current = re.sub(r"\s+", " ", match.group(1)).strip()
+            continue
+        stripped = raw.strip()
+        if current and raw[:1] in {" ", "\t"} and stripped:
+            current = f"{current} {stripped}"
+            continue
+        if current:
+            _push_unique(seen, current)
+            current = None
+    if current:
+        _push_unique(seen, current)
     return seen
+
+
+def _push_unique(seen: list[str], item: str) -> None:
+    if item and item not in seen:
+        seen.append(item)
 
 
 def extract_sections(text: str) -> dict[str, str]:

@@ -30,6 +30,7 @@ class Store:
         sql = schema_path().read_text(encoding="utf-8")
         with self.connect() as connection:
             connection.executescript(sql)
+            _ensure_run_columns(connection)
 
     def get_or_create_project(self, name: str) -> int:
         created = utc_now()
@@ -64,6 +65,7 @@ class Store:
         input_text: str,
         engine: EngineName,
         artifacts: dict[str, Any],
+        invalid: bool = False,
     ) -> SavedRun:
         project_id = self.get_or_create_project(project)
         version = self.next_version(project_id, product)
@@ -72,8 +74,9 @@ class Store:
             cursor = connection.execute(
                 """
                 INSERT INTO runs (
-                    project_id, product, version, title, input_text, engine, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    project_id, product, version, title, input_text, engine,
+                    invalid, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     project_id,
@@ -82,6 +85,7 @@ class Store:
                     title,
                     input_text,
                     engine.value,
+                    1 if invalid else 0,
                     created,
                 ),
             )
@@ -160,4 +164,13 @@ def _row_to_run(row: sqlite3.Row, artifacts: dict[str, Any]) -> SavedRun:
         engine=EngineName(row["engine"]),
         created_at=str(row["created_at"]),
         artifacts=artifacts,
+        invalid=bool(row["invalid"]) if "invalid" in row.keys() else False,
     )
+
+
+def _ensure_run_columns(connection: sqlite3.Connection) -> None:
+    columns = {info[1] for info in connection.execute("PRAGMA table_info(runs)")}
+    if "invalid" not in columns:
+        connection.execute(
+            "ALTER TABLE runs ADD COLUMN invalid INTEGER NOT NULL DEFAULT 0"
+        )

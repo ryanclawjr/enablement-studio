@@ -56,7 +56,9 @@ enablement compare 1 2
 
 ## Sample data
 
-Every fixture is labeled **EXAMPLE DATA**. Harborline Payments, Maple Street Bakery, Alex Rivera, and Jordan Kim are invented. Rates, promos, and quotas in the samples are not real and are not from a live employer or customer.
+The three demo fixtures are labeled **EXAMPLE DATA**. Harborline Payments, Maple Street Bakery, Alex Rivera, and Jordan Kim are invented. Rates, promos, and quotas in the samples are not real and are not from a live employer or customer.
+
+`fixtures/eval_stripe_sa_enablement_job.txt` is a sanitized **PUBLIC POSTING** copy used to eval Role on an enablement job. It is not fictional sample copy.
 
 ## Optional LLM
 
