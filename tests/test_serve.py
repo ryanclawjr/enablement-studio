@@ -92,6 +92,19 @@ def _assert_step_chrome(body: str, step: str) -> None:
     assert "Quiz" in body
     assert 'aria-current="step"' in body
     assert 'type="radio"' not in body
+    assert "path-card" in body
+    assert body.count("path-card") >= 6
+    current_at = body.index('aria-current="step"')
+    current_chunk = body[max(0, current_at - 80) : current_at + 280]
+    labels = {
+        "source": "Source",
+        "graph": "Graph",
+        "objectives": "Objectives",
+        "outline": "Outline",
+        "practice": "Practice",
+        "quiz": "Quiz",
+    }
+    assert labels[step] in current_chunk
 
 
 def _assert_primary_object(body: str, present: str, *absent: str) -> None:
@@ -123,10 +136,42 @@ def _assert_source_table(body: str) -> None:
     assert "onboarding buddy" not in body.lower()
     assert "job → skill graph → 30-minute module" not in body
     assert 'class="outline object"' not in body
-    assert "#16161D" in body
-    assert "#0B0B0E" in body
-    assert "#1C1C22" in body
-    assert "#FFE52F" in body
+    assert "SOURCE" in body
+    assert "Paste a job" in body
+    assert "Skills from the work" in body
+    assert 'class="collection"' in body
+    assert "version-dots" in body
+    assert "document-sheet" in body
+    assert "#16161d" in body
+    assert "#1d1d25" in body
+    assert "#ffe52f" in body
+    assert "#f6f6f6" in body
+    assert "#757575" in body
+    assert "#191a1d" in body
+    assert "rgba(236, 236, 236, 0.08)" in body
+    assert "rgba(109, 112, 130, 0.21)" in body
+    assert "rgba(132, 132, 132, 0.25)" in body
+    assert "0 20px 50px rgba(255, 242, 80, 0.34)" in body
+    assert "400ms ease" in body
+    assert "80px 80px" in body
+    assert "gap: 16px" in body
+    assert "Instrument Sans" in body
+    assert "/static/fonts/instrument-sans-latin-400-normal.woff" in body
+    assert "translateY(-2px)" not in body
+    assert "translateY(-1px)" not in body
+    assert "font: 13px/1.45" not in body
+    assert "13px/1.45" not in body
+    assert "system-ui" not in body
+    assert "Outfit" not in body
+    assert "Syne" not in body
+    assert "#0E0E12" not in body
+    assert "BGG.svg" not in body
+    assert "<canvas" not in body
+    assert "minmax(0, 42rem) 12.5rem" not in body
+    assert 'aside class="versions"' not in body
+    assert 'class="path-step' not in body
+    assert "fonts.googleapis.com" not in body
+    assert "fonts.gstatic.com" not in body
     assert "#0d0d0d" not in body
     assert "#fffd63" not in body
     assert "#f4f4f2" not in body
@@ -139,6 +184,25 @@ def test_get_home_is_role_source(server) -> None:
     status, body, _location = _http(server, "GET", "/")
     assert status == 200
     _assert_source_table(body)
+
+
+def test_local_fonts_are_served(server) -> None:
+    status, body, _location = _http(server, "GET", "/")
+    assert status == 200
+    assert "fonts.googleapis.com" not in body
+    host, port = server.server_address
+    conn = http.client.HTTPConnection(host, port, timeout=15)
+    try:
+        conn.request("GET", "/static/fonts/instrument-sans-latin-400-normal.woff")
+        response = conn.getresponse()
+        assert response.status == 200
+        assert "font/woff" in (response.getheader("Content-Type") or "")
+        payload = response.read()
+        assert payload.startswith(b"wOFF")
+    finally:
+        conn.close()
+    status, _body, _location = _http(server, "GET", "/static/../engine.py")
+    assert status == 404
 
 
 def test_get_role_is_same_source_table(server) -> None:
@@ -524,7 +588,7 @@ def test_enablement_frame_visible_for_designer(server) -> None:
     _assert_step_chrome(body, "graph")
     assert 'data-family="enablement"' in body
     assert 'data-frame="designer"' in body
-    assert "Northglass Academy" in body
+    assert "Instructional Designer" in body
     assert "storyboard" in body.lower() or "needs analysis" in body.lower()
 
 

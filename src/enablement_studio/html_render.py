@@ -118,13 +118,8 @@ def render_page(
             "{{page_title}}": _e(_page_title(resolved)),
             "{{body_class}}": _e(body_class),
             "{{project}}": _e(project),
-            "{{path_chrome}}": _path_chrome(resolved, run, output),
+            "{{step_kicker}}": _e(_step_kicker(resolved)),
             "{{notice_block}}": _notice_block(notice),
-            "{{source_strip}}": (
-                ""
-                if resolved == "source"
-                else _source_strip(text, project, output, has_key)
-            ),
             "{{error_block}}": _error_block(error),
             "{{step_board}}": (
                 ""
@@ -135,8 +130,8 @@ def render_page(
                 run, output, compare_run, compare_output
             ),
             "{{step_nav}}": "" if comparing else _step_nav(resolved, run, output),
-            "{{runs_heading}}": _runs_heading(product, project),
-            "{{runs_block}}": _runs_block(runs, run, product, project),
+            "{{version_dots}}": _version_dots(runs, run, product, project),
+            "{{path_collection}}": _path_collection(resolved, run, output),
         },
     )
 
@@ -147,24 +142,89 @@ def _page_title(step: str) -> str:
     return f"Role · {STEP_LABELS[step]}"
 
 
-def _path_chrome(
-    step: str, run: SavedRun | None, output: ProductOutput | None
+def _step_kicker(step: str) -> str:
+    return STEP_LABELS[step].upper()
+
+
+def _path_preview(name: str) -> str:
+    if name == "source":
+        return (
+            '<div class="path-preview source-preview">'
+            '<span class="mini-pill accent">Paste a job</span>'
+            '<span class="mini-pill ghost">Harborline</span>'
+            "</div>"
+        )
+    if name == "graph":
+        return (
+            '<div class="path-preview graph-preview">'
+            '<span class="graph-bars" aria-hidden="true"><i></i><i></i><i></i></span>'
+            "<p>Skills from the work</p>"
+            "</div>"
+        )
+    if name == "objectives":
+        return (
+            '<ol class="path-preview obj-preview">'
+            "<li>1· explain interchange</li>"
+            "<li>2· map authorization</li>"
+            "<li>3· settle in plain language</li>"
+            "</ol>"
+        )
+    if name == "outline":
+        return (
+            '<ol class="path-preview outline-preview">'
+            "<li>0:00 · frame</li>"
+            "<li>8:00 · rails</li>"
+            "<li>18:00 · practice</li>"
+            "</ol>"
+        )
+    if name == "practice":
+        return (
+            '<div class="path-preview practice-preview">'
+            '<span class="mini-pill ghost">Scenario</span>'
+            "<p>Owner asks why a $2.40 fee landed.</p>"
+            "</div>"
+        )
+    if name == "quiz":
+        return (
+            '<div class="path-preview quiz-preview" aria-hidden="true">'
+            '<span class="quiz-choice">A</span>'
+            '<span class="quiz-choice">B</span>'
+            '<span class="quiz-choice on">C</span>'
+            "</div>"
+        )
+    never: str = name
+    raise ValueError(f"unsupported Role step: {never}")
+
+
+def _path_collection(
+    step: str, run: SavedRun | None, _output: ProductOutput | None
 ) -> str:
     current_idx = ROLE_STEPS.index(step)
     items: list[str] = []
     for index, name in enumerate(ROLE_STEPS):
         label = STEP_LABELS[name]
         if index == current_idx:
+            state = "current"
+        elif index < current_idx:
+            state = "past"
+        else:
+            state = "future"
+        current_attr = ' aria-current="step"' if state == "current" else ""
+        inner = (
+            f'<span class="path-card-head">'
+            f"<strong>{_e(label)}</strong>"
+            '<span class="path-card-dot" aria-hidden="true"></span>'
+            "</span>"
+            f"{_path_preview(name)}"
+        )
+        if run is not None:
+            href = _e(role_path(run.id, name))
             items.append(
-                f'<span class="path-step current" aria-current="step">{_e(label)}</span>'
+                f'<a class="path-card {state}" href="{href}"{current_attr}>{inner}</a>'
             )
             continue
-        if index < current_idx and run is not None:
-            href = _e(role_path(run.id, name))
-            items.append(f'<a class="path-step past" href="{href}">{_e(label)}</a>')
-            continue
-        items.append(f'<span class="path-step future">{_e(label)}</span>')
-    return f'<nav class="role-path" aria-label="Role path">{"".join(items)}</nav>'
+        items.append(f'<div class="path-card {state}"{current_attr}>{inner}</div>')
+    return f'<nav class="collection" aria-label="Role path">{"".join(items)}</nav>'
 
 
 def _source_form(text: str, project: str, has_key: bool) -> str:
@@ -173,12 +233,9 @@ def _source_form(text: str, project: str, has_key: bool) -> str:
     return (
         '<form method="post" action="/" class="role-form">'
         '<input type="hidden" name="product" value="role">'
-        '<label class="stack">Job, SOP, or policy'
-        f'<textarea name="text" spellcheck="false" placeholder="Paste a job or SOP...">{_e(text)}</textarea>'
-        "</label>"
-        '<label class="stack">Project'
-        f'<input type="text" name="project" value="{_e(project)}" autocomplete="off">'
-        "</label>"
+        f'<input type="hidden" name="project" value="{_e(project)}" autocomplete="off">'
+        f'<textarea name="text" spellcheck="false" aria-label="Job, SOP, or policy" '
+        f'placeholder="Paste a job or SOP...">{_e(text)}</textarea>'
         '<div class="actions">'
         '<button class="run" type="submit" name="action" value="run">Run</button>'
         f'<button class="llm" type="submit" name="action" value="llm"{llm_disabled}>LLM{llm_caption}</button>'
@@ -188,35 +245,6 @@ def _source_form(text: str, project: str, has_key: bool) -> str:
         " · EXAMPLE DATA"
         "</p>"
         "</form>"
-    )
-
-
-def _source_strip(
-    text: str, project: str, output: ProductOutput | None, has_key: bool
-) -> str:
-    if not text.strip():
-        return ""
-    lines = [line.strip() for line in text.strip().splitlines() if line.strip()]
-    preview = "\n".join(lines[:3])
-    title = output.role_title if isinstance(output, RoleEnablement) else "Source"
-    llm_disabled = "" if has_key else " disabled"
-    llm_caption = "" if has_key else ' <span class="no-key-caption">(no key)</span>'
-    return (
-        '<details class="source-strip">'
-        "<summary>"
-        f'<span class="source-strip-title">{_e(title)}</span>'
-        f'<pre class="source-strip-preview">{_e(preview)}</pre>'
-        "</summary>"
-        '<form method="post" action="/" class="role-form">'
-        '<input type="hidden" name="product" value="role">'
-        f'<input type="hidden" name="project" value="{_e(project)}">'
-        f'<textarea name="text" spellcheck="false">{_e(text)}</textarea>'
-        '<div class="actions">'
-        '<button class="run" type="submit" name="action" value="run">Run</button>'
-        f'<button class="llm" type="submit" name="action" value="llm"{llm_disabled}>LLM{llm_caption}</button>'
-        "</div>"
-        "</form>"
-        "</details>"
     )
 
 
@@ -231,15 +259,13 @@ def _step_board(
     if step == "source":
         return (
             f'<div class="step-view" data-step="source">'
-            "<h2>Source</h2>"
-            f'<div class="object source-object">{_source_form(text, project, has_key)}</div>'
+            f"{_source_form(text, project, has_key)}"
             "</div>"
         )
     if not isinstance(output, RoleEnablement):
         return (
             f'<div class="step-view" data-step="source">'
-            "<h2>Source</h2>"
-            f'<div class="object source-object">{_source_form(text, project, has_key)}</div>'
+            f"{_source_form(text, project, has_key)}"
             "</div>"
         )
     inner = _role_step_inner(step, output, run, text)
@@ -779,44 +805,28 @@ def _compare_block(
     )
 
 
-def _runs_heading(product: Product, project: str) -> str:
-    return f"Versions · {_e(project)}"
-
-
-def _runs_block(
+def _version_dots(
     runs: list[SavedRun],
     current: SavedRun | None,
     product: Product,
     project: str,
 ) -> str:
-    if not runs:
-        return '<p class="hint">No runs stored for this project and product.</p>'
     recent = list(reversed(runs))[:RECENT_LIMIT]
     current_id = current.id if current is not None else None
     items = []
     for item in recent:
         is_current = current_id is not None and item.id == current_id
-        version_tag_class = "run-version-tag current-version" if is_current else "run-version-tag"
-        invalid_chip = '<span class="invalid-chip">Invalid</span> ' if item.invalid else ""
-        extra = ""
-        if (
-            current_id is not None
-            and item.id != current_id
-            and item.product is Product.ROLE
-            and product is Product.ROLE
-        ):
-            extra = (
-                f'<a class="compare-btn" href="{_e(role_path(current_id, compare=item.id))}">Compare</a>'
-            )
+        cls = "version-dot current" if is_current else "version-dot"
+        current_attr = ' aria-current="true"' if is_current else ""
+        mark = " Invalid" if item.invalid else ""
+        title = f"v{item.version} {_e(item.title)} · {_e(item.engine.value)}{mark}"
         items.append(
-            "<li>"
-            f'<a class="run-link" href="{_e(role_path(item.id))}">'
-            f'<span class="{version_tag_class}">v{item.version}</span> '
-            f"{invalid_chip}"
-            f"<span>{_e(item.title)}</span> "
-            f'<span class="mono-caption">{_e(item.engine.value)}</span>'
+            f'<a class="{cls}" href="{_e(role_path(item.id))}"{current_attr} title="{title}">'
+            f"{item.version}"
             "</a>"
-            f"{extra}"
-            "</li>"
         )
-    return '<ul class="runs">' + "".join(items) + "</ul>"
+    return (
+        f'<nav class="version-dots" id="versions" aria-label="Versions">'
+        f"{''.join(items)}"
+        "</nav>"
+    )
