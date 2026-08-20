@@ -79,6 +79,13 @@ def test_prompts_are_per_product() -> None:
     assert "Classify the job family from the source text" in role
     assert "Every objective verb appears in the graph" in role
     assert "Practice and quiz measure those verbs" in role
+    assert "Source-span nodes" in role
+    assert "Application quiz" in role
+    assert "Which move best lets a {title}" in role
+    assert "EnablementFrame" in role
+    assert "designer" in role
+    assert "educator" in role
+    assert "partner" in role
     assert "role_title" in role
     assert "skill_graph" in role
 

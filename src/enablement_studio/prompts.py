@@ -40,6 +40,9 @@ PRODUCT.md constraints:
 5. Stock lines — "before presenting price", "offer a discount", "weekend cash", "cautious buyer" — only if those nouns are in the source. Classify the job family from the source text, not from a title you invent.
 6. Every objective verb appears in the graph. Practice and quiz measure those verbs.
 7. example_data is true when the source is labeled EXAMPLE DATA or fictional. If the source is a PUBLIC POSTING, say so in source_note and do not treat it as an application.
+8. Source-span nodes: extract work units first (bullets, numbered SOP steps, "you will" / responsibility lines). Every skill node name, or a clear span of it, must appear in one of those spans. Catalogs may label a grounded name. They must not invent a node the source does not support. Empty extract → empty graph → invalid. Disclaimer / example-data sentences are not nodes.
+9. Application quiz: each item is a short scenario that uses nouns from the source, then asks for the next move or which success criterion was met. Do not write "Which move best lets a {title} {verb} {stump}?". At least one item maps to a practice.success_criteria line (same verb or same criterion). Choices are plausible moves, not job-title trivia.
+10. When family is enablement, pick one EnablementFrame and follow it in practice, audience, and module voice: designer (instructional design, LXD, curriculum, storyboard, needs analysis — the learner designs instruction); educator (nurse / clinical / patient educator, facilitator, train-the-trainer, customer-education delivery — the learner teaches or coaches practitioners); partner (enablement partner, gap analysis, packaging, launch readiness, impact metrics — the learner enables people who sell or implement). Do not put SA teams on a designer or educator source. Do not put a storyboard studio on a partner unless the source is about storyboards.
 """.strip()
 
 CALL_SYSTEM_PROMPT = """

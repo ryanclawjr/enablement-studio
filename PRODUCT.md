@@ -51,6 +51,20 @@ The Harborline AE fixture may look like an AE module. The source is an AE postin
 
 A title-swap failure must not be stored as a successful Role run. `RoleEnablement.invalid` and `runs.invalid` mark the miss so `list`, `show`, and eval can see it. Do not silently emit the AE template. Harborline AE remains a valid successful run.
 
+### Work-derived skills, application quiz, and EnablementFrame
+
+These three rules sit on top of the Role rules above. They do not replace title-swap, invalid, or the Stripe known-failure. `classify_job_family` stays `enablement | seller | unknown`. Do not invent a fourth product. Do not explode JobFamily into more enums.
+
+7. **Work-derived skill graph.** Extract work units from the source first: a bullet, a numbered SOP step, or a "you will" / responsibility line that actually appears in the input. If extract is empty, the graph is empty and the run is invalid (already the contract). Every skill node must be grounded in one of those source spans. A node name, or a clear span of it, must appear in the source. Catalogs may attach level, detail, or relation to a node whose name is grounded. They must not invent a node the source does not support, and they are not a fallback graph when extract is thin. Edges follow document order, plus explicit after/before language when it is present. Do not add catalog edges that connect invented nodes. Disclaimer and example-data sentences are not skill nodes. Known nit: Harborline "No live customer book is required" is not a node. Harborline AE stays valid because that fixture has discovery, price, and CRM work in the source — those nodes are grounded, not stamped. Stripe SA Enablement nodes (gap analysis, SA onboarding, technical packaging, launch, impact) still come from that public-posting source, not from a leftover AE catalog. A Product Manager JD with no extractable enablement or seller work stays unknown and invalid.
+
+8. **Quiz is application, not recognition.** Practice is the real assessment. Each quiz item is a short scenario that uses nouns from the source, then asks for the next move or which success criterion was met. At least one quiz item maps to a `practice.success_criteria` line (same verb or same criterion). Fail the check if the dominant quiz pattern is title-recognition: "Which move best lets a {title} {verb} {stump}?" Choices are plausible moves in that scenario, not job-title trivia. Same verbs as the graph (rule 4). Stock AE lines only if those nouns are in the source.
+
+9. **EnablementFrame** (enablement family only). ID, customer education, clinical educator, and enablement partner share "design for someone else's performance" as a classifier, not as one practice theory. When family is enablement, pick one frame and let practice, audience, and module voice follow it:
+   - `designer` — instructional design, LXD, curriculum, storyboard, needs analysis. The learner designs instruction.
+   - `educator` — nurse / clinical / patient educator, facilitator, train-the-trainer, customer-education delivery. The learner teaches or coaches practitioners.
+   - `partner` — enablement partner, gap analysis, packaging, launch readiness, impact metrics for a field team. The learner enables people who sell or implement.
+   Do not put "SA teams they support" on a designer or educator source. Do not put a storyboard studio on a Stripe SA enablement partner unless the source is about storyboards. Seller family is unchanged (field SA / AE). Director of Nursing Education and Patient Educator land `educator`, not `partner`. Instructional Designer / LXD land `designer`. Stripe SA Enablement and Customer Education Lead: pick from the source (customer-ed delivery vs program design). If both appear, prefer the verbs in the bullets.
+
 ## Call → Coach
 
 Input is a sales or training transcript.

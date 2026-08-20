@@ -15,18 +15,21 @@ from enablement_studio.models import (
     SkillGraph,
     SkillNode,
 )
-from enablement_studio.role.family import JobFamily, classify_job_family
+from enablement_studio.role.extract import extract_work_units
+from enablement_studio.role.family import (
+    EnablementFrame,
+    JobFamily,
+    classify_enablement_frame,
+    classify_job_family,
+)
 from enablement_studio.role.title_swap import apply_title_swap_validity
 from enablement_studio.textutil import (
-    extract_bullets,
     extract_title,
     is_example_data,
     is_public_posting,
-    significant_terms,
     slug,
 )
 
-_LEVELS = ("foundation", "core", "performance")
 _LEVEL_VERBS = {
     "foundation": "explain",
     "core": "demonstrate",
@@ -231,7 +234,7 @@ ENABLEMENT_CATALOG: tuple[SkillSeed, ...] = (
         "impact-metrics",
         "Enablement impact metrics",
         "performance",
-        ("metric", "metrics", "analytics", "impact", "measurable", "measure"),
+        ("metric", "metrics", "analytics", "impact", "impact metrics"),
         "Track whether the program changed productivity or readiness.",
         "measure",
         ("onboarding-design",),
@@ -271,16 +274,16 @@ def generate_role(text: str) -> RoleEnablement:
         raise ValueError("role input is empty")
     title = extract_title(source, "Role from source text")
     family = classify_job_family(source, title)
+    frame = classify_enablement_frame(source, title)
     catalog = _catalog_for(family)
-    bullets = extract_bullets(source)
-    terms = significant_terms(source)
-    nodes, edges = _skill_graph(source, bullets, terms, catalog)
+    units = extract_work_units(source)
+    nodes, edges = _skill_graph(source, units, catalog)
     focus = _focus(nodes, catalog)
-    audience = _audience_phrase(family, source)
-    objectives = _objectives(title, family, focus, source, audience)
-    outline = _outline(title, family, focus, source)
-    practice = _practice(title, family, focus, bullets, source, audience)
-    quiz = _quiz(title, family, focus, source)
+    audience = _audience_phrase(family, source, frame)
+    objectives = _objectives(title, family, frame, focus, source, audience)
+    outline = _outline(title, family, frame, focus, source)
+    practice = _practice(title, family, frame, focus, units, source, audience)
+    quiz = _quiz(title, family, focus, source, practice)
     result = RoleEnablement(
         example_data=is_example_data(source),
         source_note=PUBLIC_SOURCE_NOTE if is_public_posting(source) else SOURCE_NOTE,
@@ -320,7 +323,9 @@ def _has_sa(source: str) -> bool:
     return _SA_RE.search(source) is not None
 
 
-def _audience_phrase(family: JobFamily, source: str) -> str:
+def _audience_phrase(
+    family: JobFamily, source: str, frame: EnablementFrame | None
+) -> str:
     if family is JobFamily.SELLER:
         hay = source.lower()
         if source_mentions(source, "buyer", "prospect"):
@@ -328,18 +333,15 @@ def _audience_phrase(family: JobFamily, source: str) -> str:
         if "operator" in hay:
             return "in language operators can use"
         return "in language the other person can use"
-    hay = source.lower()
-    if _has_sa(source):
-        return "for the SA teams they support"
-    if any(token in hay for token in ("nurse", "ehr", "clinical", "medication")):
-        return "for the clinicians they train"
-    if any(token in hay for token in ("warehouse", "pallet", "pallet jack")):
-        return "for warehouse associates"
-    if "customer education" in hay or "customers going live" in hay:
-        return "for the customers they educate"
-    if "learner" in hay:
-        return "for the learners they support"
-    return "for the people they support"
+    if family is JobFamily.ENABLEMENT:
+        return f"for {_audience_noun(source, frame)}"
+    if family is JobFamily.UNKNOWN:
+        hay = source.lower()
+        if any(token in hay for token in ("warehouse", "pallet", "pallet jack")):
+            return "for warehouse associates"
+        return "for the people they support"
+    never: JobFamily = family
+    raise ValueError(f"unsupported job family: {never}")
 
 
 def _seller_counterpart(source: str) -> str:
@@ -358,17 +360,26 @@ def _seller_fact_noun(source: str) -> str:
     return "facts already named"
 
 
-def _audience_noun(source: str) -> str:
+def _audience_noun(source: str, frame: EnablementFrame | None) -> str:
     hay = source.lower()
-    if _has_sa(source):
-        return "solution architects"
-    if any(token in hay for token in ("nurse", "ehr", "clinical")):
-        return "the clinicians they train"
-    if any(token in hay for token in ("warehouse", "pallet")):
-        return "warehouse associates"
-    if "customer education" in hay or "customers going live" in hay:
-        return "the customers they educate"
-    return "the learners they support"
+    if frame is EnablementFrame.PARTNER:
+        if _has_sa(source):
+            return "the SA teams they support"
+        return "the field team they enable"
+    if frame is EnablementFrame.EDUCATOR:
+        if any(token in hay for token in ("nurse", "ehr", "clinical", "medication", "nursing")):
+            return "the clinicians they train"
+        if "customer education" in hay or "customers going live" in hay:
+            return "the customers they educate"
+        return "the practitioners they teach"
+    if frame is EnablementFrame.DESIGNER:
+        return "the learners they design for"
+    if frame is None:
+        if any(token in hay for token in ("warehouse", "pallet")):
+            return "warehouse associates"
+        return "the people they support"
+    never: EnablementFrame = frame
+    raise ValueError(f"unsupported enablement frame: {never}")
 
 
 def _focus_object(node: SkillNode, source: str) -> str:
@@ -396,66 +407,132 @@ def _focus_object(node: SkillNode, source: str) -> str:
 
 def _skill_graph(
     source: str,
-    bullets: list[str],
-    terms: set[str],
+    units: list[str],
     catalog: tuple[SkillSeed, ...],
 ) -> tuple[list[SkillNode], list[SkillEdge]]:
-    lowered = source.lower()
-    matched: list[SkillSeed] = []
-    for seed in catalog:
-        if any(keyword_in(lowered, keyword) for keyword in seed.keywords):
-            matched.append(seed)
+    if not units:
+        return [], []
 
-    extra_nodes: list[SkillNode] = []
-    if _want_extras(matched, catalog):
-        for bullet in bullets:
-            if _is_requirement_bullet(bullet) or _bullet_covered(bullet, matched):
-                continue
-            verb, name = _skill_from_bullet(bullet, "core" if terms else "foundation")
-            if any(name.lower() == seed.name.lower() for seed in matched):
-                continue
-            if any(name.lower() == node.name.lower() for node in extra_nodes):
-                continue
-            level = "core" if terms else "foundation"
-            extra_nodes.append(
-                SkillNode(
-                    id=slug(name),
-                    name=name,
-                    level=level,
-                    detail=f"{verb} — {bullet}",
-                )
+    nodes: list[SkillNode] = []
+    used_ids: set[str] = set()
+    used_names: set[str] = set()
+    for unit in units:
+        seed = _best_seed(unit, catalog)
+        if seed is not None and seed.id not in used_ids:
+            name = _grounded_name(unit, seed, source)
+            node = SkillNode(
+                id=seed.id,
+                name=name,
+                level=seed.level,
+                detail=f"{seed.verb} — {_seed_detail(seed, source)}",
             )
-            if len(extra_nodes) == 4:
-                break
+            used_ids.add(seed.id)
+        else:
+            verb, _raw_name = _skill_from_bullet(unit, "core")
+            name = _short_unit_name(unit)
+            node_id = slug(name)
+            if node_id in used_ids or name.lower() in used_names:
+                continue
+            node = SkillNode(
+                id=node_id,
+                name=name,
+                level="core",
+                detail=f"{verb} — {unit}",
+            )
+            used_ids.add(node_id)
+        if node.name.lower() in used_names:
+            continue
+        used_names.add(node.name.lower())
+        nodes.append(node)
 
-    matched_ids = {seed.id for seed in matched}
-    seeds = [seed for seed in catalog if seed.id in matched_ids]
-
-    nodes = [
-        SkillNode(
-            id=seed.id,
-            name=_seed_name(seed, source),
-            level=seed.level,
-            detail=f"{seed.verb} — {_seed_detail(seed, source)}",
-        )
-        for seed in seeds
-    ]
-    nodes.extend(extra_nodes)
-    nodes = _dedupe_nodes(nodes)
-
-    edges: list[SkillEdge] = []
-    ids = {node.id for node in nodes}
-    for seed in seeds:
-        for parent in seed.requires:
-            if parent in ids and seed.id in ids:
-                edges.append(SkillEdge(parent, seed.id, "prerequisite"))
-    if extra_nodes:
-        anchors = [node.id for node in nodes if node.level == "foundation"]
-        parent = anchors[0] if anchors else nodes[0].id
-        for extra in extra_nodes:
-            if extra.id in ids:
-                edges.append(SkillEdge(parent, extra.id, "supports"))
+    edges = _graph_edges(nodes, units, catalog)
     return nodes, edges
+
+
+def _best_seed(unit: str, catalog: tuple[SkillSeed, ...]) -> SkillSeed | None:
+    head = _short_unit_name(unit).lower()
+    lowered = unit.lower()
+    scored: list[tuple[int, int, SkillSeed]] = []
+    for seed in catalog:
+        head_hits = [keyword for keyword in seed.keywords if keyword_in(head, keyword)]
+        all_hits = [keyword for keyword in seed.keywords if keyword_in(lowered, keyword)]
+        hits = head_hits or all_hits
+        if not hits:
+            continue
+        bonus = 100 if head_hits else 0
+        scored.append((bonus + max(len(keyword) for keyword in hits), len(hits), seed))
+    if not scored:
+        return None
+    scored.sort(key=lambda item: (-item[0], -item[1]))
+    return scored[0][2]
+
+
+def _grounded_name(unit: str, seed: SkillSeed, source: str) -> str:
+    labeled = _seed_name(seed, source)
+    if _phrase_in(labeled, source):
+        return labeled
+    if _phrase_in(seed.name, source):
+        return seed.name
+    return _short_unit_name(unit)
+
+
+def _phrase_in(phrase: str, source: str) -> bool:
+    hay = re.sub(r"\s+", " ", source).lower()
+    needle = re.sub(r"\s+", " ", phrase).lower()
+    return bool(needle) and needle in hay
+
+
+def _short_unit_name(unit: str) -> str:
+    cleaned = re.sub(r"^(?:must|should|will|able to|you will)\s+", "", unit, flags=re.I)
+    cleaned = re.sub(r"[.]+$", "", cleaned).strip()
+    cleaned = re.split(
+        r"\s+(?:that|who|then|without|so that|using)\s+",
+        cleaned,
+        maxsplit=1,
+        flags=re.I,
+    )[0]
+    cleaned = cleaned.split(";")[0].strip().rstrip(" ,;:")
+    if "," in cleaned and len(cleaned) > 72:
+        cleaned = cleaned.split(",", 1)[0].strip().rstrip(" ,;:")
+    return _readable_skill_name(cleaned)
+
+
+def _graph_edges(
+    nodes: list[SkillNode],
+    units: list[str],
+    catalog: tuple[SkillSeed, ...],
+) -> list[SkillEdge]:
+    edges: list[SkillEdge] = []
+    seen: set[tuple[str, str, str]] = set()
+    ids = {node.id for node in nodes}
+    for index, node in enumerate(nodes[:-1]):
+        nxt = nodes[index + 1]
+        relation = _sequence_relation(units[index] if index < len(units) else "")
+        key = (node.id, nxt.id, relation)
+        if key not in seen:
+            seen.add(key)
+            edges.append(SkillEdge(node.id, nxt.id, relation))
+    seed_by_id = {seed.id: seed for seed in catalog}
+    for node in nodes:
+        seed = seed_by_id.get(node.id)
+        if seed is None:
+            continue
+        for parent in seed.requires:
+            if parent in ids and node.id in ids:
+                key = (parent, node.id, "prerequisite")
+                if key not in seen:
+                    seen.add(key)
+                    edges.append(SkillEdge(parent, node.id, "prerequisite"))
+    return edges
+
+
+def _sequence_relation(unit: str) -> str:
+    lowered = unit.lower()
+    if re.search(r"\bonly after\b|\bafter the\b", lowered):
+        return "after"
+    if re.search(r"\bbefore (?:any|the next|you|presenting)\b", lowered):
+        return "before"
+    return "then"
 
 
 def _seed_name(seed: SkillSeed, source: str) -> str:
@@ -469,35 +546,23 @@ def _seed_name(seed: SkillSeed, source: str) -> str:
 
 
 def _seed_detail(seed: SkillSeed, source: str) -> str:
+    if seed.id == "gap-analysis":
+        return "Enablement gap analysis from the skill and knowledge gaps in the source."
     if seed.id == "onboarding-design" and _has_sa(source):
-        return "Design onboarding and ongoing learning for the SA audience."
-    if seed.id == "launch-readiness" and _has_sa(source):
-        return "Get SA teams technically ready before a product launch."
-    return seed.detail
-
-
-def _want_extras(matched: list[SkillSeed], catalog: tuple[SkillSeed, ...]) -> bool:
-    if catalog is ENABLEMENT_CATALOG and len(matched) >= 4:
-        return False
-    return True
-
-
-def _is_requirement_bullet(bullet: str) -> bool:
-    return bool(
-        re.match(
-            r"^(experience|ability|track record|proven|demonstrated|comfort|written)\b",
-            bullet,
-            flags=re.I,
+        return "SA onboarding design for the SA audience named in the source."
+    if seed.id == "technical-packaging":
+        return (
+            "Technical packaging of product information for a sales audience."
+            if _has_sa(source) or "sales audience" in source.lower()
+            else "Technical packaging of product information for the audience."
         )
-    )
-
-
-def _bullet_covered(bullet: str, matched: list[SkillSeed]) -> bool:
-    lowered = bullet.lower()
-    return any(
-        any(keyword_in(lowered, keyword) for keyword in seed.keywords)
-        for seed in matched
-    )
+    if seed.id == "launch-readiness":
+        if _has_sa(source):
+            return "Launch readiness: get SA teams technically ready before a product launch."
+        return "Launch readiness from the source release work."
+    if seed.id == "impact-metrics":
+        return "Enablement impact metrics from the source measurement work."
+    return seed.detail
 
 
 def _skill_from_bullet(bullet: str, level: str) -> tuple[str, str]:
@@ -525,14 +590,6 @@ def _verb_complement(verb: str, node: SkillNode, source: str) -> str:
     if focus_object == verb or focus_object.startswith(f"{verb} "):
         return focus_object
     return f"{verb} {focus_object}"
-
-
-def _dedupe_nodes(nodes: list[SkillNode]) -> list[SkillNode]:
-    seen: dict[str, SkillNode] = {}
-    for node in nodes:
-        seen.setdefault(node.id, node)
-    ordered = sorted(seen.values(), key=lambda item: (_LEVELS.index(item.level), item.name))
-    return ordered
 
 
 def _article(title: str) -> str:
@@ -575,28 +632,13 @@ def _verb_from_detail(node: SkillNode) -> str | None:
 def _objectives(
     title: str,
     family: JobFamily,
+    frame: EnablementFrame | None,
     focus: list[tuple[str, SkillNode]],
     source: str,
     audience: str,
 ) -> list[LearningObjective]:
-    measures = {
-        "foundation": "a 90-second teach-back scored on a 3-point rubric",
-        "core": "a live role-play scored against a behavior checklist",
-        "performance": "a recorded call review with one observable next-step",
-    }
-    if family is JobFamily.ENABLEMENT:
-        measures = {
-            "foundation": "a scored gap-analysis brief a manager can inspect",
-            "core": "a packaged enablement artifact scored against a checklist",
-            "performance": "an impact metric with a baseline and a review date",
-        }
-    elif family is JobFamily.UNKNOWN:
-        measures = {
-            "foundation": "a 90-second teach-back scored on a 3-point rubric",
-            "core": "a live practice scored against a behavior checklist",
-            "performance": "an on-the-job check with one observable next-step",
-        }
-    elif family is not JobFamily.SELLER:
+    measures = _objective_measures(family, frame)
+    if family not in {JobFamily.ENABLEMENT, JobFamily.SELLER, JobFamily.UNKNOWN}:
         never: JobFamily = family
         raise ValueError(f"unsupported job family: {never}")
     objectives: list[LearningObjective] = []
@@ -613,32 +655,59 @@ def _objectives(
                 skill_id=node.id,
                 measure=measures[node.level],
             )
-        )
+            )
     return objectives
 
 
-def _outline(
-    title: str, family: JobFamily, focus: list[tuple[str, SkillNode]], source: str
-) -> list[ModuleBlock]:
-    core = focus[0][1].name.lower() if focus else "the core skill"
-    if family is JobFamily.ENABLEMENT and _has_sa(source) and "launch" in source.lower():
-        hook = (
-            f"Open with an SA who cannot package a launch, then name the one "
-            f"{title} behavior this 30 minutes will change."
-        )
-    elif family is JobFamily.SELLER:
-        hook = (
-            f"Open with a missed {title} moment and name the one behavior "
-            "this 30 minutes will change."
-        )
-    elif family in {JobFamily.ENABLEMENT, JobFamily.UNKNOWN}:
-        hook = (
-            f"Open with a missed {title} moment and name the one behavior "
-            "this 30 minutes will change."
-        )
-    else:
+def _objective_measures(
+    family: JobFamily, frame: EnablementFrame | None
+) -> dict[str, str]:
+    if family is JobFamily.SELLER:
+        return {
+            "foundation": "a 90-second teach-back scored on a 3-point rubric",
+            "core": "a live role-play scored against a behavior checklist",
+            "performance": "a recorded call review with one observable next-step",
+        }
+    if family is JobFamily.UNKNOWN:
+        return {
+            "foundation": "a 90-second teach-back scored on a 3-point rubric",
+            "core": "a live practice scored against a behavior checklist",
+            "performance": "an on-the-job check with one observable next-step",
+        }
+    if family is not JobFamily.ENABLEMENT:
         never: JobFamily = family
         raise ValueError(f"unsupported job family: {never}")
+    if frame is EnablementFrame.DESIGNER:
+        return {
+            "foundation": "a scored needs-analysis or design brief a manager can inspect",
+            "core": "an instructional artifact scored against a checklist",
+            "performance": "a revision from learner performance data",
+        }
+    if frame is EnablementFrame.EDUCATOR:
+        return {
+            "foundation": "a teach-back scored on a 3-point rubric",
+            "core": "a live skills-lab or facilitation scored against a checklist",
+            "performance": "a recorded coaching moment with one observable next-step",
+        }
+    if frame is EnablementFrame.PARTNER:
+        return {
+            "foundation": "a scored gap-analysis brief a manager can inspect",
+            "core": "a packaged enablement artifact scored against a checklist",
+            "performance": "an impact metric with a baseline and a review date",
+        }
+    never_frame: EnablementFrame | None = frame
+    raise ValueError(f"unsupported enablement frame: {never_frame}")
+
+
+def _outline(
+    title: str,
+    family: JobFamily,
+    frame: EnablementFrame | None,
+    focus: list[tuple[str, SkillNode]],
+    source: str,
+) -> list[ModuleBlock]:
+    core = focus[0][1].name.lower() if focus else "the core skill"
+    hook = _outline_hook(title, family, frame, source)
     return [
         ModuleBlock("0–5", "Hook and outcome", hook),
         ModuleBlock(
@@ -659,46 +728,65 @@ def _outline(
     ]
 
 
+def _outline_hook(
+    title: str,
+    family: JobFamily,
+    frame: EnablementFrame | None,
+    source: str,
+) -> str:
+    if family is JobFamily.SELLER:
+        return (
+            f"Open with a missed {title} moment and name the one behavior "
+            "this 30 minutes will change."
+        )
+    if family is JobFamily.UNKNOWN:
+        return (
+            f"Open with a missed {title} moment and name the one behavior "
+            "this 30 minutes will change."
+        )
+    if family is not JobFamily.ENABLEMENT:
+        never: JobFamily = family
+        raise ValueError(f"unsupported job family: {never}")
+    if frame is EnablementFrame.PARTNER and _has_sa(source) and "launch" in source.lower():
+        return (
+            f"Open with an SA who cannot package a launch, then name the one "
+            f"{title} behavior this 30 minutes will change."
+        )
+    if frame is EnablementFrame.DESIGNER:
+        return (
+            f"Open with a {title} module that skipped the source design step, "
+            "then name the one behavior this 30 minutes will change."
+        )
+    if frame is EnablementFrame.EDUCATOR:
+        return (
+            f"Open with a missed teach-back for {title}, then name the one "
+            "behavior this 30 minutes will change."
+        )
+    if frame is EnablementFrame.PARTNER:
+        return (
+            f"Open with a missed {title} moment and name the one behavior "
+            "this 30 minutes will change."
+        )
+    never_frame: EnablementFrame | None = frame
+    raise ValueError(f"unsupported enablement frame: {never_frame}")
+
+
 def _practice(
     title: str,
     family: JobFamily,
+    frame: EnablementFrame | None,
     focus: list[tuple[str, SkillNode]],
-    bullets: list[str],
+    units: list[str],
     source: str,
     audience: str,
 ) -> PracticeActivity:
     skill = focus[0][1].name.lower() if focus else "the core skill"
     verbs = list(dict.fromkeys(verb for verb, _ in focus))
     verb_list = ", ".join(verbs) if verbs else "practice"
-    context = bullets[0] if bullets else f"a typical {title} conversation"
+    context = units[0] if units else f"a typical {title} conversation"
     if family is JobFamily.ENABLEMENT:
-        instructions = [
-            f"{_cap(_verb_complement(verb, node, source))} from this source cue."
-            for verb, node in focus[:3]
-        ]
-        if not instructions:
-            instructions = ["Build one learning artifact from the source cue."]
-        sa = _has_sa(source)
-        return PracticeActivity(
-            title=f"12-minute {skill} drill",
-            scenario=(
-                f"You are {_article(title)} {title} supporting {_audience_noun(source)}. "
-                f"Source cue: {context}"
-            ),
-            instructions=instructions,
-            success_criteria=[
-                f"The drill measures these verbs: {verb_list}.",
-                (
-                    "The output is an enablement artifact for SAs, not a buyer pitch."
-                    if sa
-                    else "The output is a learning artifact, not a buyer pitch."
-                ),
-                (
-                    "Onboarding design, technical packaging, or launch readiness is visible."
-                    if sa or source_mentions(source, "onboarding", "packaging", "launch")
-                    else f"The artifact practices the source verbs: {verb_list}."
-                ),
-            ],
+        return _practice_enablement(
+            title, frame, focus, skill, verb_list, context, source
         )
     if family is JobFamily.SELLER:
         counterpart = _seller_counterpart(source)
@@ -747,6 +835,81 @@ def _practice(
     raise ValueError(f"unsupported job family: {never}")
 
 
+def _practice_enablement(
+    title: str,
+    frame: EnablementFrame | None,
+    focus: list[tuple[str, SkillNode]],
+    skill: str,
+    verb_list: str,
+    context: str,
+    source: str,
+) -> PracticeActivity:
+    audience = _audience_noun(source, frame)
+    instructions = [
+        f"{_cap(_verb_complement(verb, node, source))} from this source cue."
+        for verb, node in focus[:3]
+    ] or ["Build one learning artifact from the source cue."]
+    if frame is EnablementFrame.DESIGNER:
+        return PracticeActivity(
+            title=f"12-minute {skill} studio",
+            scenario=(
+                f"You are {_article(title)} {title} designing instruction for {audience}. "
+                f"Source cue: {context}"
+            ),
+            instructions=instructions,
+            success_criteria=[
+                f"The drill measures these verbs: {verb_list}.",
+                "The output is an instructional design artifact, not a buyer pitch.",
+                (
+                    "Needs analysis, storyboard, or a knowledge check is visible."
+                    if source_mentions(
+                        source, "storyboard", "needs analysis", "knowledge check"
+                    )
+                    else f"The artifact practices the source verbs: {verb_list}."
+                ),
+            ],
+        )
+    if frame is EnablementFrame.EDUCATOR:
+        return PracticeActivity(
+            title=f"12-minute {skill} teaching drill",
+            scenario=(
+                f"You are {_article(title)} {title} teaching {audience}. "
+                f"Source cue: {context}"
+            ),
+            instructions=instructions,
+            success_criteria=[
+                f"The drill measures these verbs: {verb_list}.",
+                "The output is a teaching or coaching artifact, not a buyer pitch.",
+                f"The artifact practices the source verbs: {verb_list}.",
+            ],
+        )
+    if frame is EnablementFrame.PARTNER:
+        sa = _has_sa(source)
+        return PracticeActivity(
+            title=f"12-minute {skill} drill",
+            scenario=(
+                f"You are {_article(title)} {title} supporting {audience}. "
+                f"Source cue: {context}"
+            ),
+            instructions=instructions,
+            success_criteria=[
+                f"The drill measures these verbs: {verb_list}.",
+                (
+                    "The output is an enablement artifact for SAs, not a buyer pitch."
+                    if sa
+                    else "The output is an enablement artifact for the field team, not a buyer pitch."
+                ),
+                (
+                    "Onboarding design, technical packaging, or launch readiness is visible."
+                    if sa or source_mentions(source, "onboarding", "packaging", "launch")
+                    else f"The artifact practices the source verbs: {verb_list}."
+                ),
+            ],
+        )
+    never: EnablementFrame | None = frame
+    raise ValueError(f"unsupported enablement frame: {never}")
+
+
 def _stock_choices(source: str) -> list[str]:
     choices = ["Send a logo slide deck and wait"]
     if source_mentions(source, "discount"):
@@ -761,181 +924,151 @@ def _stock_choices(source: str) -> list[str]:
 
 
 def _quiz(
-    title: str, family: JobFamily, focus: list[tuple[str, SkillNode]], source: str
+    title: str,
+    family: JobFamily,
+    focus: list[tuple[str, SkillNode]],
+    source: str,
+    practice: PracticeActivity,
 ) -> list[QuizItem]:
-    if family is JobFamily.ENABLEMENT:
-        return _quiz_enablement(title, focus, source)
-    if family is JobFamily.SELLER:
-        return _quiz_seller(title, focus, source)
-    if family is JobFamily.UNKNOWN:
-        return _quiz_source(title, focus, source)
-    never: JobFamily = family
-    raise ValueError(f"unsupported job family: {never}")
-
-
-def _quiz_enablement(
-    title: str, focus: list[tuple[str, SkillNode]], source: str
-) -> list[QuizItem]:
-    items: list[QuizItem] = []
-    distractors = _stock_choices(source)
-    sa = _has_sa(source)
-    for verb, node in focus[:3]:
-        complement = _verb_complement(verb, node, source)
-        answer = (
-            f"{verb.capitalize()} from SA evidence in the field"
-            if sa
-            else f"{verb.capitalize()} from evidence in the source"
-        )
-        items.append(
-            QuizItem(
-                f"Which move best lets {_article(title)} {title} {complement}?",
-                [answer, *distractors[:3]],
-                answer,
-                f"The module measures the verb {verb} on {complement}.",
-            )
-        )
-    if any(node.id == "impact-metrics" for _, node in focus) or source_mentions(
-        source, "metric", "metrics", "impact"
-    ):
-        items.append(
-            QuizItem(
-                "Which artifact proves enablement impact metrics happened?",
-                [
-                    "A recorded call with one observable next-step",
-                    "Attendance at the webinar",
-                    "A metric that measures adoption or launch readiness",
-                    "A longer meeting",
-                ],
-                "A metric that measures adoption or launch readiness",
-                "Impact is measured in the work, not in seat time.",
-            )
-        )
+    if family not in {JobFamily.ENABLEMENT, JobFamily.SELLER, JobFamily.UNKNOWN}:
+        never: JobFamily = family
+        raise ValueError(f"unsupported job family: {never}")
+    items = _quiz_scenarios(family, focus, source)
+    items.append(_quiz_criterion_item(focus, source, practice))
+    if len(items) < 3:
+        items.append(_quiz_transfer_item(focus))
     return items
 
 
-def _quiz_seller(
-    title: str, focus: list[tuple[str, SkillNode]], source: str
+def _quiz_scenarios(
+    family: JobFamily, focus: list[tuple[str, SkillNode]], source: str
 ) -> list[QuizItem]:
-    first = focus[0][1].name if focus else "the foundation skill"
-    core = next(
-        (node.name for verb, node in focus if node.level == "core"),
-        first,
-    )
-    verb_list = (
-        ", ".join(dict.fromkeys(verb for verb, _ in focus)) if focus else "demonstrate"
-    )
     items: list[QuizItem] = []
-    if source_mentions(source, "price", "pricing"):
+    if family is JobFamily.SELLER and source_mentions(source, "price", "pricing"):
+        noun = "chargeback pain" if "chargeback" in source.lower() else "the named pain"
+        answer = "Ask for current process, pain, and success criteria"
         items.append(
             QuizItem(
-                f"What should {_article(title)} {title} do before presenting price?",
+                (
+                    f"The other person asks what it costs after naming {noun}. "
+                    "What is the next move before presenting price?"
+                ),
                 [
+                    answer,
                     "Confirm budget authority only",
-                    "Ask for current process, pain, and success criteria",
                     "Send a one-pager and wait",
                     "Offer a discount to create urgency"
                     if source_mentions(source, "discount")
                     else "Send a logo slide deck and wait",
                 ],
-                "Ask for current process, pain, and success criteria",
-                "Discovery before commercial talk is the first enablement rule in this module.",
-            )
-        )
-    elif focus:
-        verb, node = focus[0]
-        complement = _verb_complement(verb, node, source)
-        answer = f"{_cap(complement)} from facts already named"
-        items.append(
-            QuizItem(
-                f"Which move best lets {_article(title)} {title} {complement}?",
-                [answer, *_stock_choices(source)[:3]],
                 answer,
-                f"The module measures the verb {verb} on {complement}.",
+                "Discovery before commercial talk is measured in this module.",
             )
         )
-    if source_mentions(source, "crm"):
-        items.append(
-            QuizItem(
-                f"Which artifact proves {core.lower()} happened?",
-                [
-                    "A slide deck with the logo",
-                    "A talk track memorized word-for-word",
-                    "Buyer facts written in the CRM with a dated next step",
-                    "A longer meeting",
-                ],
-                "Buyer facts written in the CRM with a dated next step",
-                "If it is not written down, coaching cannot inspect it.",
-            )
-        )
-    else:
-        items.append(
-            QuizItem(
-                f"Which artifact proves {core.lower()} happened?",
-                [
-                    "A slide deck with the logo",
-                    "A talk track memorized word-for-word",
-                    "Written notes the other person can correct",
-                    "A longer meeting",
-                ],
-                "Written notes the other person can correct",
-                "If it is not written down, coaching cannot inspect it.",
-            )
-        )
-    items.append(
-        QuizItem(
-            "A good 30-minute module spends most of its time on:",
-            [
-                "Company history",
-                "Guided practice with a checklist",
-                "A recorded keynote",
-                "A policy acknowledgment",
-            ],
-            "Guided practice with a checklist",
-            "Practice is where the skill graph becomes behavior.",
-        )
-    )
-    items.append(
-        QuizItem(
-            f"Which measure fits a performance-level {title} objective?",
-            [
-                "Attendance at the webinar",
-                "A smile sheet score of 4.5",
-                "A recorded call with one observable next-step",
-                "Number of slides reviewed",
-            ],
-            "A recorded call with one observable next-step",
-            f"Performance skills are measured in the work. Verbs: {verb_list}.",
-        )
-    )
-    return items
-
-
-def _quiz_source(
-    title: str, focus: list[tuple[str, SkillNode]], source: str
-) -> list[QuizItem]:
-    distractors = _stock_choices(source)
-    items: list[QuizItem] = []
     for verb, node in focus[:3]:
-        complement = _verb_complement(verb, node, source)
-        answer = f"{verb.capitalize()} the source step: {node.name.lower()}"
+        if len(items) >= 3:
+            break
+        answer = _next_move_answer(verb, node, source)
         items.append(
             QuizItem(
-                f"Which move best lets someone in {title} {complement}?",
-                [answer, *distractors[:3]],
+                f"{_scenario_stem(node)} What is the next move?",
+                [answer, *_plausible_moves(source, family, answer)],
                 answer,
-                f"The module measures the verb {verb} on {complement}.",
+                f"The graph measures the verb {verb}.",
             )
         )
     if not items:
         items.append(
             QuizItem(
-                f"What should a {title} module practice?",
+                "The source names the next work. What is the next move?",
                 [
                     "The next step named in the source",
-                    *distractors[:3],
+                    *_plausible_moves(source, family, "The next step named in the source"),
                 ],
                 "The next step named in the source",
                 "Skills come from this source, not a generic seller template.",
             )
         )
     return items
+
+
+def _quiz_criterion_item(
+    focus: list[tuple[str, SkillNode]],
+    source: str,
+    practice: PracticeActivity,
+) -> QuizItem:
+    verbs = [verb for verb, _ in focus]
+    criterion = practice.success_criteria[0] if practice.success_criteria else (
+        "The practice stays in the domain of the source."
+    )
+    for line in practice.success_criteria:
+        if any(verb in line.lower() for verb in verbs):
+            criterion = line
+            break
+    stem = _scenario_stem(focus[0][1]) if focus else "The practice drill finished."
+    return QuizItem(
+        f"{stem} Which success criterion was met?",
+        [
+            criterion,
+            "Attendance at the webinar",
+            "A smile sheet score of 4.5",
+            "Number of slides reviewed",
+        ],
+        criterion,
+        f"Practice already named this criterion: {criterion}",
+    )
+
+
+def _quiz_transfer_item(focus: list[tuple[str, SkillNode]]) -> QuizItem:
+    verb_list = (
+        ", ".join(dict.fromkeys(verb for verb, _ in focus)) if focus else "practice"
+    )
+    return QuizItem(
+        "The live opportunity is next. Which transfer move fits this module?",
+        [
+            "Guided practice with a checklist",
+            "Company history",
+            "A recorded keynote",
+            "A policy acknowledgment",
+        ],
+        "Guided practice with a checklist",
+        f"Practice is where the skill graph becomes behavior. Verbs: {verb_list}.",
+    )
+
+
+def _scenario_stem(node: SkillNode) -> str:
+    text = node.name.strip().rstrip(".")
+    return f"{_cap(text)} is the live situation."
+
+
+def _next_move_answer(verb: str, node: SkillNode, source: str) -> str:
+    name = node.name.strip()
+    first = name.split(None, 1)[0].lower() if name else ""
+    if first == verb or first in _LEADING_VERBS:
+        return name
+    return _cap(_verb_complement(verb, node, source))
+
+
+def _plausible_moves(source: str, family: JobFamily, exclude: str) -> list[str]:
+    if family is JobFamily.SELLER:
+        pool = [
+            "Send a logo slide deck and wait",
+            "Skip discovery and pitch the full catalog",
+            "End early and skip the check",
+        ]
+        if source_mentions(source, "discount"):
+            pool.insert(1, "Offer a discount to create urgency")
+    elif family is JobFamily.ENABLEMENT:
+        pool = [
+            "Send a logo slide deck and wait",
+            "Skip practice and read the policy aloud",
+            "End early and skip the check",
+        ]
+    elif family is JobFamily.UNKNOWN:
+        pool = _stock_choices(source)
+    else:
+        never: JobFamily = family
+        raise ValueError(f"unsupported job family: {never}")
+    return [item for item in pool if item != exclude][:3]
+
+
