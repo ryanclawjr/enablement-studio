@@ -4,6 +4,7 @@ import re
 from enum import Enum
 
 from enablement_studio.role.extract import extract_work_units
+from enablement_studio.textutil import extract_title
 
 _ENABLEMENT_TITLE = re.compile(
     r"enablement|l\s*&\s*d|learning and development|"
@@ -132,7 +133,7 @@ def classify_job_family(source: str, title: str = "") -> JobFamily:
 
 
 def classify_enablement_frame(source: str, title: str = "") -> EnablementFrame | None:
-    heading = title or ""
+    heading = title or extract_title(source, "")
     if classify_job_family(source, heading) is not JobFamily.ENABLEMENT:
         return None
     title_frame = _frame_from_title(heading)
