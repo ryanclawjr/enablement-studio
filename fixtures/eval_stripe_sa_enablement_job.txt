@@ -1,0 +1,38 @@
+PUBLIC POSTING — sanitized copy of a public Stripe careers listing.
+Greenhouse job 8115022. Not an application.
+Listed at https://stripe.com/jobs/listing/solution-architect-enablement-business-partner/8115022
+This copy includes title, team, responsibilities, and minimum requirements only.
+No apply buttons, pay ranges, or application materials.
+
+Job title: Solution Architect Enablement Business Partner
+Team: Global Sales Enablement
+
+About the team
+Global Sales Enablement drives productivity and effectiveness across the sales
+organization. This role is a technical enablement expert who empowers solution
+architects. The Solution Architect (SA) Enablement Business Partner develops
+and delivers enablement programs that equip SA teams with product knowledge,
+technical skills, and consultative selling capabilities for enterprise customers.
+
+Responsibilities
+- Design and deliver comprehensive onboarding programs, ongoing training, and
+  just-in-time learning resources for SA teams
+- Identify skill and knowledge gaps, then build enablement programs that drive
+  measurable improvements in satisfaction, productivity, and revenue generation
+- Package technical product information, solution architectures, and selling
+  strategies for a sales audience using scalable content frameworks
+- Establish metrics and analytics to track the impact of enablement initiatives
+- Partner with product, engineering, and go-to-market teams so enablement
+  content stays current for the field
+- Partner with Product Operations and Product teams to stay ahead of upcoming
+  product releases and ensure technical readiness prior to launch
+- Cultivate a community of expert practitioners and user-generated content
+
+Minimum requirements
+- Experience in solution architecture and enablement for global organizations
+  offering payments or SaaS-based solutions
+- Ability to translate complex technical concepts for a sales audience
+- Track record of designing and delivering enablement programs that drive
+  measurable improvements in sales performance
+- Ability to work with technical and non-technical stakeholders
+- Experience with content creation, curation, and knowledge management

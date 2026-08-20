@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS runs (
     title TEXT NOT NULL,
     input_text TEXT NOT NULL,
     engine TEXT NOT NULL CHECK (engine IN ('offline', 'llm')),
+    invalid INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     UNIQUE (project_id, product, version)
 );

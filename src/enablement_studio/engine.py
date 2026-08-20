@@ -12,11 +12,12 @@ from enablement_studio.models import (
     EngineName,
     Product,
     ProductOutput,
+    RoleEnablement,
     call_from_dict,
     critic_from_dict,
     role_from_dict,
 )
-from enablement_studio.role import generate_role
+from enablement_studio.role import apply_title_swap_validity, generate_role
 
 LLM_KEY_ENV = "ENABLEMENT_LLM_API_KEY"
 LLM_BASE_ENV = "ENABLEMENT_LLM_BASE_URL"
@@ -33,7 +34,10 @@ def generate(product: Product, text: str) -> tuple[ProductOutput, EngineName]:
         return offline, EngineName.OFFLINE
     try:
         payload = _llm_json(product, text)
-        return _from_llm(product, payload), EngineName.LLM
+        output = _from_llm(product, payload)
+        if isinstance(output, RoleEnablement):
+            output = apply_title_swap_validity(output, text)
+        return output, EngineName.LLM
     except (
         ValueError,
         TypeError,
@@ -74,7 +78,9 @@ def _llm_json(product: Product, text: str) -> dict[str, Any]:
                     "content": (
                         "Return only JSON for an instructional-design specialist. "
                         "Do not invent live employer metrics. Mark example_data true "
-                        "if the source is labeled example or fictional."
+                        "if the source is labeled example or fictional. "
+                        "For product=role, extract skills from this source. "
+                        "Enablement, L&D, or coaching jobs are not seller modules."
                     ),
                 },
                 {

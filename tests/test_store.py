@@ -19,6 +19,7 @@ def test_schema_files_match() -> None:
     checked_in = (repo / "data/schema.sql").read_text(encoding="utf-8")
     assert packaged == checked_in
     assert "version INTEGER NOT NULL" in checked_in
+    assert "invalid INTEGER NOT NULL DEFAULT 0" in checked_in
 
 
 def test_save_run_increments_version(tmp_path: Path, job_text: str) -> None:

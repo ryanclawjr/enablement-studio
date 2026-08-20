@@ -10,6 +10,11 @@ SOURCE_NOTE = (
     "Not sourced from a live employer or customer."
 )
 
+PUBLIC_SOURCE_NOTE = (
+    "Generated locally from a sanitized public job posting. "
+    "Not an application. No pay ranges, apply buttons, or application materials."
+)
+
 
 class Product(str, Enum):
     ROLE = "role"
@@ -84,6 +89,7 @@ class RoleEnablement:
     outline: list[ModuleBlock]
     practice: PracticeActivity
     quiz: list[QuizItem]
+    invalid: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -167,6 +173,7 @@ class SavedRun:
     engine: EngineName
     created_at: str
     artifacts: dict[str, Any] = field(default_factory=dict)
+    invalid: bool = False
 
 
 def _require(data: dict[str, Any], *keys: str) -> None:
@@ -191,6 +198,7 @@ def role_from_dict(data: dict[str, Any]) -> RoleEnablement:
         outline=[ModuleBlock(**item) for item in data["outline"]],
         practice=PracticeActivity(**practice),
         quiz=[QuizItem(**item) for item in data["quiz"]],
+        invalid=bool(data.get("invalid", False)),
     )
 
 

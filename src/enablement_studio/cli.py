@@ -122,6 +122,7 @@ def _cmd_compare(args: argparse.Namespace) -> int:
 def _run_product(product: Product, text: str, *, project: str, as_json: bool) -> int:
     output, engine = generate(product, text)
     store = Store(default_db_path())
+    invalid = bool(getattr(output, "invalid", False))
     run = store.save_run(
         project=project,
         product=product,
@@ -129,6 +130,7 @@ def _run_product(product: Product, text: str, *, project: str, as_json: bool) ->
         input_text=text,
         engine=engine,
         artifacts=artifact_map(output),
+        invalid=invalid,
     )
     if as_json:
         print(json.dumps(output.to_dict(), indent=2))

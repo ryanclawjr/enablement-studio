@@ -17,6 +17,21 @@ def test_fixtures_are_marked_example() -> None:
         assert "fictional" in text.lower()
 
 
+def test_eval_fixture_is_public_posting_not_example() -> None:
+    text = find_fixture("eval_stripe_sa_enablement_job.txt").read_text(encoding="utf-8")
+    assert "PUBLIC POSTING" in text
+    assert "EXAMPLE DATA" not in text
+    assert "fictional" not in text.lower()
+    assert "8115022" in text
+    assert "Solution Architect Enablement Business Partner" in text
+    lowered = text.lower()
+    assert "apply now" not in lowered
+    assert "$" not in text
+    assert "salary" not in lowered
+    for banned in ("LAPC", "Autonoma", "IDN", "SIGNIT"):
+        assert banned not in text
+
+
 def test_repo_and_package_fixtures_match() -> None:
     repo = Path(__file__).resolve().parents[1]
     packaged = repo / "src/enablement_studio/fixtures"

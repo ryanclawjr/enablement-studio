@@ -8,7 +8,7 @@ Passing the Harborline Account Executive demo is the happy path only. It does no
 
 ## Why this file exists
 
-The offline Role path looks right on `fixtures/example_account_executive_job.txt` and fails on a real enablement job posting. It pastes the new title onto a sales-discovery / "before presenting price" template. The skill graph, practice, and quiz remain a seller module.
+The offline Role path looks right on `fixtures/example_account_executive_job.txt` and used to fail on a real enablement job posting: it pasted the new title onto a sales-discovery / "before presenting price" template. The skill graph, practice, and quiz stayed a seller module. That miss is the title-swap test.
 
 This file names what good means so the next sitting can change prompts and tests against it.
 
@@ -49,7 +49,7 @@ Take a finished Role module. Replace only the role title with "Account Executive
 
 The Harborline AE fixture may look like an AE module. The source is an AE posting. The Stripe enablement JD is the counterexample. A passing module does not ask what to do before presenting price, and does not treat CRM next-step logging as the proof of skill.
 
-v0 has no invalid flag on `RoleEnablement`. When this contract is implemented, a title-swap failure must not be stored as a successful Role run. Either refuse to save or persist a run marked invalid so `list`, `show`, and eval can see the miss. Do not silently emit the AE template.
+A title-swap failure must not be stored as a successful Role run. `RoleEnablement.invalid` and `runs.invalid` mark the miss so `list`, `show`, and eval can see it. Do not silently emit the AE template. Harborline AE remains a valid successful run.
 
 ## Call → Coach
 
@@ -78,19 +78,13 @@ A scavenger-hunt activity against "explain interchange" fails alignment. The rew
 
 ## Eval
 
-Specify only. Do not add cases in this sitting.
-
 - Keep the three fictional fixtures for the happy-path demos: `example_account_executive_job.txt`, `example_sales_call.txt`, `example_new_hire_lesson.md`. They stay labeled EXAMPLE DATA.
-- Add a later eval case: the Stripe SA Enablement JD, or a sanitized copy labeled as a public posting. Role must fail the title-swap test on that case today and pass after this contract is implemented.
-- `pytest` stays green with no API keys. LLM work is a later sitting.
+- Eval case: `fixtures/eval_stripe_sa_enablement_job.txt` is a sanitized public-posting copy of Stripe Solution Architect Enablement Business Partner (Greenhouse 8115022). It is labeled PUBLIC POSTING, not EXAMPLE DATA. No apply buttons, pay ranges, or application materials.
+- A canned AE-template blob must fail the title-swap test. Role output on the Stripe eval fixture must pass it.
+- `pytest` stays green with no API keys.
 
-Do not check the Stripe JD into this sitting. When it is added, label it as a public posting, not as fictional EXAMPLE DATA, and do not include application materials or subscriber/PII.
+## Out of scope
 
-## Out of scope this sitting
-
-- No LLM prompt rewrite.
 - No local web UI.
 - No domain, hosting, or Autonoma merge.
 - No new products.
-
-This sitting is the contract only.
