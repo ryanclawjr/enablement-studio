@@ -31,6 +31,11 @@ _BLOOM = {
     "teach",
     "map",
     "close",
+    "identify",
+    "perform",
+    "operate",
+    "inspect",
+    "check",
 }
 
 
@@ -50,8 +55,12 @@ def generate_critic(text: str) -> LessonCritique:
     bloom_in_objective = objective_terms & _BLOOM
 
     objective_score = _objective_score(objective_text, bloom_in_objective)
-    activity_score = _alignment_score(objective_terms, activity_terms, activity_text)
-    assess_score = _alignment_score(objective_terms, assess_terms, assess_text)
+    activity_score = _alignment_score(
+        objective_terms, activity_terms, activity_text, objective_text
+    )
+    assess_score = _alignment_score(
+        objective_terms, assess_terms, assess_text, objective_text
+    )
     overall = clamp(round((objective_score + activity_score + assess_score) / 3))
     scores = AlignmentScores(objective_score, activity_score, assess_score, overall)
 
@@ -96,12 +105,30 @@ def _objective_score(objective_text: str, bloom: set[str]) -> int:
     return clamp(score)
 
 
-def _alignment_score(objective_terms: set[str], other_terms: set[str], other_text: str) -> int:
+def _stated_verb(text: str) -> str | None:
+    match = re.search(r"will (?:be able to )?(\w+)", text, flags=re.I)
+    if match:
+        return match.group(1).lower()
+    return None
+
+
+def _alignment_score(
+    objective_terms: set[str],
+    other_terms: set[str],
+    other_text: str,
+    objective_text: str = "",
+) -> int:
     if not other_text:
         return 1
     if not objective_terms:
         return 2
+    verb = _stated_verb(objective_text)
+    other_lower = other_text.lower()
+    shared_verbs = (objective_terms & other_terms) & _BLOOM
+    verb_hit = bool(verb and (verb in other_lower or verb in other_terms))
     overlap = len(objective_terms & other_terms)
+    if verb_hit or shared_verbs:
+        return 5 if overlap >= 3 else 4
     if overlap == 0:
         return 1
     if overlap <= 2:
@@ -174,32 +201,30 @@ def _rewrite(
         ("objective", scores.objective_clarity, objective_text),
     ]
     target, score, _original = min(named, key=lambda item: item[1])
-    verb = "explain"
-    match = re.search(r"will (?:be able to )?(\w+)", objective_text, flags=re.I)
-    if match:
-        verb = match.group(1).lower()
+    verb = _stated_verb(objective_text) or "explain"
     topic = _topic(objective_text) or title
+    hay = f"{title}\n{objective_text}\n{activity_text}\n{assess_text}".lower()
+    listener, cue = _listener_and_cue(hay, topic)
     if target == "activity":
         replacement = (
             f"## Activity (rewrite)\n"
             f"Paired teach-back (8 minutes): one learner {verb}s {topic} "
-            "to a skeptical small-business owner. The partner only asks "
-            "'what does that mean for my weekend cash?' Swap roles. "
+            f"to {listener}. The partner only asks '{cue}' Swap roles. "
             "Facilitator scores a 3-item rubric: accuracy, plain language, one next question."
         )
         reason = "The original activity does not practice the objective verb."
     elif target == "assessment":
         replacement = (
             f"## Assessment (rewrite)\n"
-            f"1. In 90 seconds, {verb} {topic} to a buyer who has never heard the term.\n"
-            "2. Name the buyer cue that tells you they understood.\n"
-            "3. What is the one next question you will ask on a live call?"
+            f"1. In 90 seconds, {verb} {topic} to {listener}.\n"
+            f"2. Name the cue that tells you they understood.\n"
+            "3. What is the one next question you will ask in the next practice?"
         )
         reason = "The original check measures logistics, not the skill in the objective."
     else:
         replacement = (
             f"## Learning objective (rewrite)\n"
-            f"Given a first conversation with a small-business owner, the learner will "
+            f"Given a realistic practice with {listener}, the learner will "
             f"{verb} {topic} in plain language, as measured by a 90-second teach-back "
             "scored on accuracy, clarity, and one relevant follow-up question."
         )
@@ -207,15 +232,32 @@ def _rewrite(
     return Rewrite(target=target, reason=reason, replacement=replacement)
 
 
+def _listener_and_cue(hay: str, topic: str) -> tuple[str, str]:
+    if any(token in hay for token in ("pallet", "warehouse", "aisle", "jack")):
+        return "a warehouse associate", "what do you check before the next lift?"
+    if any(token in hay for token in ("ehr", "nurse", "mar", "medication", "chart")):
+        return "a clinician", "what is the next safe chart step?"
+    if "small-business owner" in hay or "weekend cash" in hay:
+        return "a skeptical small-business owner", "what does that mean for my weekend cash?"
+    if "buyer" in hay:
+        return "a buyer", "what is the one next question on a live call?"
+    return "a colleague", f"what does {topic} change in the work?"
+
+
 def _topic(objective_text: str) -> str:
     match = re.search(
-        r"(interchange|authorization|settlement|discovery|pipeline|objection[^.]*)",
+        r"(interchange|authorization|settlement|discovery|pipeline|objection[^.]|"
+        r"pallet-jack|pallet jack|warehouse|ehr|medication)",
         objective_text,
         flags=re.I,
     )
     if match:
         return match.group(1).lower()
-    words = [word for word in re.findall(r"[A-Za-z]{4,}", objective_text) if word.lower() not in {"will", "able", "this", "that"}]
+    words = [
+        word
+        for word in re.findall(r"[A-Za-z]{4,}", objective_text)
+        if word.lower() not in {"will", "able", "this", "that", "given", "learner"}
+    ]
     if words:
         return " ".join(words[:6]).lower()
     return "the target skill"

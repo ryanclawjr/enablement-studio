@@ -1,0 +1,21 @@
+EXAMPLE DATA — fictional skills-lab transcript. Not a real patient recording.
+
+Call: EHR skills lab, allergy banner and MAR
+Nurse Educator: Sam Chen
+New Hire: Riley Okonkwo
+
+Sam Chen: Riley, open the chart. Where do you document the allergy before
+you give the med?
+
+Riley Okonkwo: On the banner. I click through to the MAR.
+
+Sam Chen: Show me the double-check. What do you say out loud?
+
+Riley Okonkwo: Patient name, medication, dose, and time. Then I read the
+override reason before I continue.
+
+Sam Chen: Good. Teach it back while I tick the skills-lab checklist. Stop
+if the banner and the MAR disagree.
+
+Riley Okonkwo: Banner first, then MAR, then the four checks out loud. If
+they disagree I stop and call you.

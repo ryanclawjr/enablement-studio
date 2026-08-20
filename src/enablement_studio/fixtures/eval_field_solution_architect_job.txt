@@ -1,0 +1,14 @@
+EXAMPLE DATA — fictional job posting. Not from a live employer.
+
+Job title: Field Solution Architect
+Company: Northline Systems (invented)
+
+About the role
+You sit with enterprise operators and prove a path in their environment.
+This posting does not mention commercial terms.
+
+Responsibilities
+- Run discovery on the current integration and the operators who own it
+- Demo the checkout path that matches the notes from discovery
+- Leave a written architecture sketch the operator can correct
+- Schedule the next working session with an owner and a date

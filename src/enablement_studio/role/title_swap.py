@@ -53,7 +53,11 @@ def fails_title_swap(role: RoleEnablement) -> bool:
 
 def apply_title_swap_validity(role: RoleEnablement, source: str) -> RoleEnablement:
     family = classify_job_family(source, role.role_title)
-    invalid = family is not JobFamily.SELLER and fails_title_swap(role)
+    empty = not role.skill_graph.nodes
+    unknown = family is JobFamily.UNKNOWN
+    portable = family is not JobFamily.SELLER and fails_title_swap(role)
+    seller_dump = family is not JobFamily.SELLER and looks_like_ae_seller_module(role)
+    invalid = empty or unknown or portable or seller_dump
     if role.invalid == invalid:
         return role
     return replace(role, invalid=invalid)

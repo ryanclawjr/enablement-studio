@@ -1,0 +1,13 @@
+EXAMPLE DATA — fictional job posting. Not from a live employer.
+
+Job title: Learning Experience Designer
+Company: Pine Harbor Labs (invented)
+
+About the role
+You design the path a learner walks, not a sales pitch.
+
+Responsibilities
+- Map the learner journey from first login to independent practice
+- Prototype practice activities and collect friction notes
+- Pair each activity with a knowledge check that uses the same verb
+- Measure whether the experience changed on-the-job behavior

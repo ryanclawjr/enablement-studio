@@ -71,6 +71,11 @@ _ROSTER_SPEAKERS = {
     "learner",
     "coach",
     "trainer",
+    "nurse educator",
+    "new hire",
+    "educator",
+    "facilitator",
+    "preceptor",
 }
 
 

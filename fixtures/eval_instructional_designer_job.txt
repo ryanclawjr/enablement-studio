@@ -1,0 +1,14 @@
+EXAMPLE DATA — fictional job posting. Not from a live employer.
+
+Job title: Instructional Designer
+Company: Northglass Academy (invented)
+
+About the role
+Build courses for working adults. This posting never uses the industry program
+word the other catalog keys on.
+
+Responsibilities
+- Run a needs analysis with subject-matter experts before any slide work
+- Storyboard modules, knowledge checks, and a facilitator guide
+- Facilitate a pilot, then revise from learner performance data
+- Write measurable objectives that name a verb and a job condition
