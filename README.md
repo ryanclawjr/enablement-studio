@@ -62,7 +62,7 @@ Same three products, same SQLite file, no API key.
 enablement serve
 ```
 
-That binds **127.0.0.1:8765** (loopback only; pass `--host` / `--port` to change). `--host 0.0.0.0` prints a warning: stored job postings and transcripts would be on the LAN with no auth. Open http://127.0.0.1:8765, pick Role / Call / Critic, paste a job, SOP, transcript, or outline, or load a packaged demo fixture. POSTs from a foreign Origin or Referer are rejected; curl and same-origin form posts still work. Run writes to the same `data/enablement.db` the CLI uses. There is no login and no cloud database.
+That binds **127.0.0.1:8765** (loopback only; pass `--host` / `--port` to change). `--host 0.0.0.0` prints a warning: stored job postings and transcripts would be on the LAN with no auth. Open http://127.0.0.1:8765. Role is the studio: sit a JD, SOP, or policy on the table, run, and read the skill graph, objectives, 30-minute outline, practice, and application quiz. Source stays visible. Job family and EnablementFrame (enablement family only) are labeled. Invalid Role runs are called in plain English. History is this project and product; two Role runs can be compared. Call and Critic stay on the other benches. Load a packaged demo fixture (EXAMPLE DATA). POSTs from a foreign Origin or Referer are rejected; curl and same-origin form posts still work. Run writes to the same `data/enablement.db` the CLI uses. There is no login and no cloud database.
 
 ## Sample data
 

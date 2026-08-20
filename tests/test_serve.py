@@ -7,14 +7,16 @@ from urllib.parse import urlencode
 import pytest
 
 from enablement_studio.cli import _build_parser, main
-from enablement_studio.html_render import _render_critic
+from enablement_studio.html_render import _render_critic, render_page
 from enablement_studio.models import (
     SOURCE_NOTE,
     AlignmentScores,
     LessonCritique,
+    Product,
     Rewrite,
 )
-from enablement_studio.paths import default_db_path
+from enablement_studio.paths import default_db_path, find_fixture
+from enablement_studio.role.title_swap import apply_title_swap_validity
 from enablement_studio.serve import (
     DEFAULT_HOST,
     DEFAULT_PORT,
@@ -22,6 +24,8 @@ from enablement_studio.serve import (
     make_server,
 )
 from enablement_studio.store import Store
+
+from canned_ae_template import canned_ae_template_role
 
 
 @pytest.fixture
@@ -76,9 +80,11 @@ def _http(
 def test_get_home_names_three_products(server) -> None:
     status, body, _location = _http(server, "GET", "/")
     assert status == 200
+    assert "Role studio" in body
     assert "Role → Enablement" in body
     assert "Call → Coach" in body
     assert "Lesson critic" in body
+    assert "onboarding buddy" not in body.lower()
 
 
 def test_post_role_harborline_saves_run(server, job_text: str) -> None:
@@ -97,6 +103,15 @@ def test_post_role_harborline_saves_run(server, job_text: str) -> None:
     assert runs[0].product.value == "role"
     assert runs[0].engine.value == "offline"
     assert "Account Executive" in runs[0].title
+    assert "Harborline Payments" in body
+    assert "weekend cash-flow" in body
+    assert 'data-family="seller"' in body
+    assert 'class="skill-graph' in body
+    assert 'class="objectives' in body
+    assert 'class="outline' in body
+    assert 'class="practice' in body
+    assert 'class="quiz' in body
+    assert "not a successful Role module" not in body
 
 
 def test_post_empty_text_is_400(server) -> None:
@@ -191,4 +206,146 @@ def test_get_demo_fills_harborline_fixture(server) -> None:
     assert status == 200
     assert "Harborline Payments" in body
     assert "EXAMPLE DATA" in body
+    assert "EXAMPLE DATA — fictional sample" in body or "EXAMPLE DATA fixtures" in body
     assert Store(default_db_path()).list_runs() == []
+
+
+def test_invalid_role_is_plain_english_not_success(server) -> None:
+    text = find_fixture("eval_warehouse_sop.txt").read_text(encoding="utf-8")
+    posted = urlencode({"product": "role", "text": text, "project": "default"})
+    status, body, _location = _http(server, "POST", "/", body=posted)
+    assert status == 200
+    assert "not a successful Role module" in body
+    assert "unknown" in body.lower()
+    assert "studio-failed" in body
+    assert "pallet-jack" in body or "pallet jack" in body
+    store = Store(default_db_path())
+    assert store.list_runs()[0].invalid is True
+
+
+def test_title_swap_failure_copy_is_plain_english() -> None:
+    canned = apply_title_swap_validity(
+        canned_ae_template_role(),
+        find_fixture("eval_stripe_sa_enablement_job.txt").read_text(encoding="utf-8"),
+    )
+    assert canned.invalid is True
+    html = render_page(
+        product=Product.ROLE,
+        project="eval",
+        text="Job title: Solution Architect Enablement Business Partner\n- Identify skill gaps",
+        runs=[],
+        output=canned,
+    )
+    lowered = html.lower()
+    assert "not a successful role module" in lowered
+    assert "title-swap" in lowered or "swapping the job title" in lowered
+    assert "account executive" in lowered
+    assert 'class="studio-ok"' not in html
+
+
+def test_enablement_frame_visible_for_designer(server) -> None:
+    text = find_fixture("eval_instructional_designer_job.txt").read_text(
+        encoding="utf-8"
+    )
+    posted = urlencode({"product": "role", "text": text, "project": "studio"})
+    status, body, _location = _http(server, "POST", "/", body=posted)
+    assert status == 200
+    assert 'data-family="enablement"' in body
+    assert 'data-frame="designer"' in body
+    assert "Northglass Academy" in body
+    assert "storyboard" in body.lower() or "needs analysis" in body.lower()
+
+
+def test_partner_frame_visible_for_stripe_eval(server, stripe_enablement_text: str) -> None:
+    posted = urlencode(
+        {"product": "role", "text": stripe_enablement_text, "project": "eval"}
+    )
+    status, body, _location = _http(server, "POST", "/", body=posted)
+    assert status == 200
+    assert 'data-family="enablement"' in body
+    assert 'data-frame="partner"' in body
+    assert "PUBLIC POSTING" in body or "public job posting" in body.lower()
+    assert "not a successful Role module" not in body
+
+
+def test_history_is_this_project_and_product(server, job_text: str, call_text: str) -> None:
+    _http(
+        server,
+        "POST",
+        "/",
+        body=urlencode({"product": "role", "text": job_text, "project": "alpha"}),
+    )
+    _http(
+        server,
+        "POST",
+        "/",
+        body=urlencode({"product": "call", "text": call_text, "project": "alpha"}),
+    )
+    other = find_fixture("eval_warehouse_sop.txt").read_text(encoding="utf-8")
+    _http(
+        server,
+        "POST",
+        "/",
+        body=urlencode({"product": "role", "text": other, "project": "beta"}),
+    )
+    store = Store(default_db_path())
+    alpha_role = next(
+        run
+        for run in store.list_runs(project="alpha", product=Product.ROLE)
+    )
+    status, body, _location = _http(server, "GET", f"/?run={alpha_role.id}")
+    assert status == 200
+    assert f"/?run={alpha_role.id}" in body
+    beta_role = next(
+        run for run in store.list_runs(project="beta", product=Product.ROLE)
+    )
+    call_run = next(
+        run for run in store.list_runs(project="alpha", product=Product.CALL)
+    )
+    history = body[body.index("This project") :] if "This project" in body else body
+    assert f"/?run={beta_role.id}" not in history
+    assert f"/?run={call_run.id}" not in history
+
+
+def test_compare_two_role_runs(server, job_text: str, stripe_enablement_text: str) -> None:
+    _http(
+        server,
+        "POST",
+        "/",
+        body=urlencode({"product": "role", "text": job_text, "project": "studio"}),
+    )
+    _http(
+        server,
+        "POST",
+        "/",
+        body=urlencode(
+            {"product": "role", "text": stripe_enablement_text, "project": "studio"}
+        ),
+    )
+    store = Store(default_db_path())
+    runs = store.list_runs(project="studio", product=Product.ROLE)
+    assert len(runs) == 2
+    left, right = runs[0], runs[1]
+    status, body, _location = _http(
+        server, "GET", f"/?run={left.id}&amp;compare={right.id}".replace("&amp;", "&")
+    )
+    assert status == 200
+    assert "Compare" in body
+    assert "Account Executive" in body
+    assert "Enablement Business Partner" in body
+    assert "Harborline Payments" in body
+
+
+def test_get_overflow_compare_id_is_404(server, job_text: str) -> None:
+    _http(
+        server,
+        "POST",
+        "/",
+        body=urlencode({"product": "role", "text": job_text, "project": "default"}),
+    )
+    run = Store(default_db_path()).list_runs()[0]
+    status, body, _location = _http(
+        server, "GET", f"/?run={run.id}&compare={2**63}"
+    )
+    assert status == 404
+    assert "not found" in body.lower()

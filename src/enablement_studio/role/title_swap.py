@@ -76,6 +76,45 @@ def has_ungated_stock_lines(role: RoleEnablement, source: str) -> bool:
     )
 
 
+def role_invalid_reasons(role: RoleEnablement, source: str) -> list[str]:
+    """Plain-English reasons the run is not a successful Role module."""
+    source_title = extract_title(source, "")
+    family = classify_job_family(source, source_title)
+    reasons: list[str] = []
+    if not role.skill_graph.nodes:
+        reasons.append(
+            "No work units could be extracted into a skill graph. "
+            "The module is empty, so it is stored as invalid."
+        )
+    if family is JobFamily.UNKNOWN:
+        reasons.append(
+            "This source did not classify as enablement or seller work "
+            "(job family: unknown). Unknown jobs are stored as invalid "
+            "so they are not treated as a successful Role run."
+        )
+    if family is not JobFamily.SELLER and fails_title_swap(role):
+        reasons.append(
+            "Title-swap failed: replacing the job title with Account Executive "
+            "still leaves a coherent seller module. The skill graph, practice, "
+            "and quiz are not grounded in this job."
+        )
+    if family is not JobFamily.SELLER and looks_like_ae_seller_module(role):
+        reasons.append(
+            "The module still reads as a generic seller course "
+            "(discovery / price / CRM), not this job."
+        )
+    if has_ungated_stock_lines(role, source):
+        reasons.append(
+            "The module uses stock seller lines (price, discount, cautious buyer) "
+            "that do not appear in this source."
+        )
+    if not reasons:
+        reasons.append(
+            "This Role run is marked invalid and is not a successful module."
+        )
+    return reasons
+
+
 def apply_title_swap_validity(role: RoleEnablement, source: str) -> RoleEnablement:
     # Family from THIS source. An LLM can title an ID job "Account Executive"
     # and would otherwise skip portability / stock-line checks.
