@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enablement_studio.call import generate_call
+from enablement_studio.textutil import parse_turns
 
 
 def test_call_fixture_notes_and_fix(call_text: str) -> None:
@@ -11,8 +12,8 @@ def test_call_fixture_notes_and_fix(call_text: str) -> None:
     assert result.enablement_fix.title
     assert result.enablement_fix.fix
     assert any("price" in signal.lower() for signal in result.signals)
-    assert "Alex Rivera" in result.speakers
-    assert "Jordan Kim" in result.speakers
+    assert result.speakers == ["Alex Rivera", "Jordan Kim"]
+    assert [turn.speaker for turn in parse_turns(call_text)][:1] == ["Alex Rivera"]
 
 
 def test_call_detects_talk_ratio() -> None:

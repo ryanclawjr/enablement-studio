@@ -51,6 +51,27 @@ _TURN_RE = re.compile(
     r"^(?P<speaker>[A-Za-z][A-Za-z0-9 ./'&-]{0,48})\s*:\s+(?P<line>.+)$"
 )
 _WORD_RE = re.compile(r"[A-Za-z][A-Za-z0-9'+-]{2,}")
+_META_SPEAKERS = {
+    "call",
+    "title",
+    "job title",
+    "company",
+    "lesson",
+    "role",
+    "position",
+}
+_ROSTER_SPEAKERS = {
+    "account executive",
+    "ae",
+    "prospect",
+    "customer",
+    "buyer",
+    "rep",
+    "seller",
+    "learner",
+    "coach",
+    "trainer",
+}
 
 
 def is_example_data(text: str) -> bool:
@@ -151,15 +172,28 @@ def parse_turns(text: str) -> list[SpeakerTurn]:
             continue
         match = _TURN_RE.match(line)
         if match:
+            speaker = match.group("speaker").strip()
+            spoken = match.group("line").strip()
+            if _is_metadata_line(speaker, spoken):
+                continue
             if current is not None:
                 turns.append(current)
-            current = SpeakerTurn(match.group("speaker").strip(), match.group("line").strip())
+            current = SpeakerTurn(speaker, spoken)
             continue
         if current is not None and not line.startswith("#"):
             current = SpeakerTurn(current.speaker, f"{current.text} {line}")
     if current is not None:
         turns.append(current)
     return turns
+
+
+def _is_metadata_line(speaker: str, spoken: str) -> bool:
+    label = speaker.lower()
+    if label in _META_SPEAKERS:
+        return True
+    if label in _ROSTER_SPEAKERS and word_count(spoken) <= 4:
+        return True
+    return False
 
 
 def word_count(text: str) -> int:

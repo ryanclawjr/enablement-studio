@@ -152,7 +152,9 @@ def _skill_graph(
         matched = [seed for seed in CATALOG if seed.level in {"foundation", "core"}][:4]
 
     extra_nodes: list[SkillNode] = []
-    for bullet in bullets[:4]:
+    for bullet in bullets:
+        if _bullet_covered(bullet, matched):
+            continue
         name = _skill_name_from_bullet(bullet)
         if any(name.lower() == seed.name.lower() for seed in matched):
             continue
@@ -164,6 +166,8 @@ def _skill_graph(
                 detail=bullet,
             )
         )
+        if len(extra_nodes) == 2:
+            break
 
     required_ids = {seed.id for seed in matched}
     for seed in matched:
@@ -192,6 +196,11 @@ def _skill_graph(
     return nodes, edges
 
 
+def _bullet_covered(bullet: str, matched: list[SkillSeed]) -> bool:
+    lowered = bullet.lower()
+    return any(any(keyword in lowered for keyword in seed.keywords) for seed in matched)
+
+
 def _skill_name_from_bullet(bullet: str) -> str:
     cleaned = re.sub(r"^(?:must|should|will|able to)\s+", "", bullet, flags=re.I)
     cleaned = re.sub(r"[.]+$", "", cleaned)
@@ -208,8 +217,19 @@ def _dedupe_nodes(nodes: list[SkillNode]) -> list[SkillNode]:
     return ordered
 
 
+def _article(title: str) -> str:
+    return "an" if title[:1].lower() in {"a", "e", "i", "o", "u"} else "a"
+
+
 def _objectives(title: str, nodes: list[SkillNode]) -> list[LearningObjective]:
-    focus = [node for node in nodes if node.level in {"core", "performance"}][:4]
+    catalog_ids = {seed.id for seed in CATALOG}
+    focus = [
+        node
+        for node in nodes
+        if node.id in catalog_ids and node.level in {"core", "performance"}
+    ][:4]
+    if len(focus) < 3:
+        focus = [node for node in nodes if node.level in {"core", "performance"}][:4]
     if len(focus) < 3:
         focus = nodes[:3]
     verbs = {
@@ -240,8 +260,20 @@ def _objectives(title: str, nodes: list[SkillNode]) -> list[LearningObjective]:
     return objectives
 
 
+def _catalog_core_name(nodes: list[SkillNode]) -> str:
+    catalog_ids = {seed.id for seed in CATALOG}
+    return next(
+        (
+            node.name.lower()
+            for node in nodes
+            if node.id in catalog_ids and node.level == "core"
+        ),
+        next((node.name.lower() for node in nodes if node.level == "core"), "the core skill"),
+    )
+
+
 def _outline(title: str, nodes: list[SkillNode]) -> list[ModuleBlock]:
-    core = next((node.name.lower() for node in nodes if node.level == "core"), "the core skill")
+    core = _catalog_core_name(nodes)
     return [
         ModuleBlock(
             "0–5",
@@ -267,12 +299,12 @@ def _outline(title: str, nodes: list[SkillNode]) -> list[ModuleBlock]:
 
 
 def _practice(title: str, nodes: list[SkillNode], bullets: list[str]) -> PracticeActivity:
-    skill = next((node.name.lower() for node in nodes if node.level == "core"), "the target skill")
+    skill = _catalog_core_name(nodes)
     context = bullets[0] if bullets else f"a typical {title} conversation"
     return PracticeActivity(
         title=f"12-minute {skill} drill",
         scenario=(
-            f"You are a {title}. The other person is a cautious buyer. "
+            f"You are {_article(title)} {title}. The other person is a cautious buyer. "
             f"Source cue (example or user text): {context}"
         ),
         instructions=[
@@ -293,7 +325,7 @@ def _quiz(title: str, nodes: list[SkillNode]) -> list[QuizItem]:
     core = next((node.name for node in nodes if node.level == "core"), first)
     return [
         QuizItem(
-            f"What should a {title} do before presenting price?",
+            f"What should {_article(title)} {title} do before presenting price?",
             [
                 "Confirm budget authority only",
                 "Ask for current process, pain, and success criteria",

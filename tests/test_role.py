@@ -15,6 +15,8 @@ def test_role_fixture_is_complete(job_text: str) -> None:
     assert len(result.quiz) >= 3
     assert any(node.id == "discovery" for node in result.skill_graph.nodes)
     assert "live employer" in result.source_note.lower()
+    assert all("matches the" not in node.name for node in result.skill_graph.nodes)
+    assert any("demonstrate discovery" in item.statement.lower() for item in result.objectives)
 
 
 def test_role_title_follows_input() -> None:
