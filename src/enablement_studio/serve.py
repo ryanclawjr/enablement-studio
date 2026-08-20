@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+import sys
 from html import escape
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
@@ -15,12 +17,25 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 DEFAULT_PROJECT = "default"
 MAX_BODY_BYTES = 1_000_000
+BIND_EXPOSURE_WARNING = (
+    "warning: --host 0.0.0.0 exposes stored job postings and transcripts "
+    "on the LAN with no authentication. Default bind is 127.0.0.1."
+)
+
+
+def bind_exposure_warning(host: str) -> str | None:
+    if host in {"0.0.0.0", "::"}:
+        return BIND_EXPOSURE_WARNING
+    return None
 
 
 def serve(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> None:
     httpd = make_server(host, port)
     print(f"Enablement Studio local UI  http://{host}:{port}")
     print("Loopback by default. Same SQLite store as the CLI. Ctrl-C to stop.")
+    warning = bind_exposure_warning(host)
+    if warning:
+        print(warning, file=sys.stderr)
     try:
         httpd.serve_forever()
     finally:
@@ -51,10 +66,10 @@ class EnablementHandler(BaseHTTPRequestHandler):
         if run_raw:
             try:
                 run = store.get_run(int(run_raw))
-            except (KeyError, ValueError):
+                output = output_from_run(run)
+            except (KeyError, ValueError, OverflowError, sqlite3.Error):
                 self._send(404, _error_page(f"run {run_raw} not found"))
                 return
-            output = output_from_run(run)
             product = run.product
             project = run.project
             text = run.input_text
@@ -78,6 +93,9 @@ class EnablementHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path != "/":
             self._send(404, _error_page("Not found."))
+            return
+        if not _csrf_ok(self):
+            self._send(403, _error_page("cross-origin POST rejected."))
             return
         try:
             fields = self._read_form()
@@ -132,6 +150,29 @@ class EnablementHandler(BaseHTTPRequestHandler):
         self.send_header("Location", location)
         self.send_header("Content-Length", "0")
         self.end_headers()
+
+
+def _csrf_ok(handler: EnablementHandler) -> bool:
+    origin = handler.headers.get("Origin")
+    referer = handler.headers.get("Referer")
+    if not origin and not referer:
+        return True
+    host, port = handler.server.server_address
+    allowed_hosts = {"127.0.0.1", "localhost", "::1"}
+    if host not in {"0.0.0.0", "::"}:
+        allowed_hosts.add(str(host).lower())
+    return _url_is_this_server(origin or referer or "", allowed_hosts, int(port))
+
+
+def _url_is_this_server(url: str, allowed_hosts: set[str], port: int) -> bool:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    hostname = (parsed.hostname or "").lower()
+    if hostname not in allowed_hosts:
+        return False
+    default_port = 443 if parsed.scheme == "https" else 80
+    return (parsed.port or default_port) == port
 
 
 def _first(query: dict[str, list[str]], key: str) -> str | None:

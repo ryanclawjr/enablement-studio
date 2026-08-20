@@ -128,7 +128,36 @@ def test_field_sa_may_stay_seller_without_price_quiz() -> None:
     assert "before presenting price" not in blob
     assert "offer a discount" not in blob
     assert "weekend cash" not in blob
+    assert "cautious buyer" not in blob
+    assert "buyer facts" not in blob
     assert "discovery" in blob
+    assert "operator" in blob
+
+
+def test_nursing_education_titles_are_enablement() -> None:
+    titles = (
+        "Director of Nursing Education",
+        "Nursing Education Director",
+        "Head of Nursing Education",
+        "Director of Education",
+        "Clinical Education Manager",
+        "Patient Educator",
+        "Nurse Educator",
+        "Clinical Educator",
+    )
+    for title in titles:
+        text = (
+            f"EXAMPLE DATA — fictional job posting.\nJob title: {title}\n"
+            "- Coach new hires through a skills check\n"
+            "- Record which steps still fail\n"
+        )
+        assert "skills lab" not in text.lower()
+        assert "skills-lab" not in text.lower()
+        family = classify_job_family(text, title)
+        assert family is JobFamily.ENABLEMENT, title
+        role = generate_role(text)
+        assert role.invalid is False, title
+        assert role.skill_graph.nodes, title
 
 
 def test_unknown_invalid_run_is_persisted(tmp_path) -> None:

@@ -55,6 +55,26 @@ def test_clean_discovery_call_does_not_claim_early_pitch() -> None:
     assert result.speakers == ["Alex Rivera", "Jordan Kim"]
 
 
+def test_non_payments_price_call_has_no_payments_voice() -> None:
+    text = (
+        "EXAMPLE DATA — fictional sales call.\n"
+        "Call: First meeting, Northglass SaaS\n"
+        "Account Executive: Sam Lee\n"
+        "Prospect: Pat Chen\n\n"
+        "Sam Lee: Thanks for meeting. Our list price is ninety a seat and we have "
+        "a promo this quarter.\n"
+        "Pat Chen: We are evaluating a workspace tool for operators.\n"
+        "Sam Lee: I can walk the dashboard next week.\n"
+    )
+    assert "processor" not in text.lower()
+    assert "interchange" not in text.lower()
+    result = generate_call(text)
+    blob = _call_blob(result)
+    assert "how money moves" not in blob
+    assert "rate card" not in blob
+    assert "you pitched before you earned the right" in blob
+
+
 def test_ehr_skills_lab_has_no_money_moves_fix() -> None:
     text = find_fixture("eval_ehr_skills_lab_call.txt").read_text(encoding="utf-8")
     result = generate_call(text)

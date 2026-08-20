@@ -45,7 +45,7 @@ _STOP = {
 _TITLE_RE = re.compile(
     r"(?im)^(?:job title|role|position|title|lesson|call)\s*[:\-]\s*(.+)$"
 )
-_HEADING_RE = re.compile(r"(?m)^#{1,3}\s+(.+)$")
+_HEADING_RE = re.compile(r"(?m)^[ \t]*#{1,3}\s+(.+)$")
 _BULLET_RE = re.compile(r"(?m)^\s*(?:[-*•]|\d+[.)])\s+(.+)$")
 _TURN_RE = re.compile(
     r"^(?P<speaker>[A-Za-z][A-Za-z0-9 ./'&-]{0,48})\s*:\s+(?P<line>.+)$"

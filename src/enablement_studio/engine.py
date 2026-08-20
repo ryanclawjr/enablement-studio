@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import urllib.error
@@ -8,17 +9,17 @@ from typing import Any
 
 from enablement_studio.call import generate_call
 from enablement_studio.critic import generate_critic
+from enablement_studio.guards import apply_llm_guards
 from enablement_studio.models import (
     EngineName,
     Product,
     ProductOutput,
-    RoleEnablement,
     call_from_dict,
     critic_from_dict,
     role_from_dict,
 )
 from enablement_studio.prompts import system_prompt
-from enablement_studio.role import apply_title_swap_validity, generate_role
+from enablement_studio.role import generate_role
 
 LLM_KEY_ENV = "ENABLEMENT_LLM_API_KEY"
 LLM_BASE_ENV = "ENABLEMENT_LLM_BASE_URL"
@@ -57,17 +58,20 @@ def generate(product: Product, text: str) -> tuple[ProductOutput, EngineName]:
     try:
         payload = _llm_json(product, text)
         output = _from_llm(product, payload)
-        if isinstance(output, RoleEnablement):
-            output = apply_title_swap_validity(output, text)
-        return output, EngineName.LLM
+        guarded = apply_llm_guards(product, output, text)
+        if guarded is None:
+            return offline, EngineName.OFFLINE
+        return guarded, EngineName.LLM
     except (
         ValueError,
         TypeError,
         KeyError,
+        IndexError,
         OSError,
         urllib.error.URLError,
         json.JSONDecodeError,
         TimeoutError,
+        http.client.IncompleteRead,
     ):
         return offline, EngineName.OFFLINE
 
@@ -99,7 +103,10 @@ def _llm_json(product: Product, text: str) -> dict[str, Any]:
     )
     with urllib.request.urlopen(request, timeout=LLM_TIMEOUT_SECONDS) as response:
         raw = json.loads(response.read().decode("utf-8"))
-    content = raw["choices"][0]["message"]["content"]
+    choices = raw.get("choices") or []
+    if not choices:
+        raise ValueError("LLM response had no choices")
+    content = choices[0]["message"]["content"]
     parsed = json.loads(content)
     if not isinstance(parsed, dict):
         raise ValueError("LLM response was not an object")

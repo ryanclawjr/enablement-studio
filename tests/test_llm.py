@@ -16,7 +16,9 @@ from enablement_studio.engine import (
     llm_configured,
     llm_endpoint,
 )
-from enablement_studio.models import EngineName, Product, RoleEnablement
+from enablement_studio.call import generate_call
+from enablement_studio.critic import generate_critic
+from enablement_studio.models import EngineName, Product, RoleEnablement, role_from_dict
 from enablement_studio.paths import find_fixture
 from enablement_studio.prompts import (
     CALL_SYSTEM_PROMPT,
@@ -73,6 +75,8 @@ def test_prompts_are_per_product() -> None:
     assert "before presenting price" in role
     assert "offer a discount" in role
     assert "weekend cash" in role
+    assert "cautious buyer" in role
+    assert "Classify the job family from the source text" in role
     assert "Every objective verb appears in the graph" in role
     assert "Practice and quiz measure those verbs" in role
     assert "role_title" in role
@@ -84,6 +88,8 @@ def test_prompts_are_per_product() -> None:
     assert "you pitched before you earned the right" in call
     assert "EHR skills lab" in call
     assert "money / rate / CRM" in call
+    assert "how money moves" in call
+    assert "rate card" in call
     assert "call_title" in call
     assert "enablement_fix" in call
 
@@ -193,6 +199,127 @@ def test_no_key_never_opens_network(
     output, engine = generate(Product.ROLE, job_text)
     assert engine is EngineName.OFFLINE
     assert output.example_data is True
+
+
+def _empty_choices(_request: Request, timeout: object = None) -> _FakeResponse:
+    return _FakeResponse(json.dumps({"choices": []}))
+
+
+def test_empty_choices_fall_back_offline(
+    monkeypatch: pytest.MonkeyPatch, job_text: str
+) -> None:
+    expected = generate_role(job_text)
+    _set_fake_key(monkeypatch)
+    monkeypatch.setattr(
+        "enablement_studio.engine.urllib.request.urlopen", _empty_choices
+    )
+    output, engine = generate(Product.ROLE, job_text)
+    assert engine is EngineName.OFFLINE
+    assert output == expected
+
+
+def test_role_extra_nested_key_still_hydrates(job_text: str) -> None:
+    payload = generate_role(job_text).to_dict()
+    payload["skill_graph"]["nodes"][0]["extra"] = "bonus"
+    payload["unexpected_top"] = True
+    role = role_from_dict(payload)
+    assert role.role_title == payload["role_title"]
+    assert role.skill_graph.nodes
+
+
+def test_llm_ae_dump_without_canned_markers_is_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = find_fixture("eval_instructional_designer_job.txt").read_text(
+        encoding="utf-8"
+    )
+    offline = generate_role(source)
+    payload = offline.to_dict()
+    payload["role_title"] = "Account Executive"
+    payload["practice"]["scenario"] = (
+        "Offer a discount to create urgency around weekend cash."
+    )
+    payload["practice"]["instructions"] = ["Offer a discount and mention weekend cash."]
+    payload["quiz"] = [
+        {
+            "question": "What should you do?",
+            "choices": ["Offer a discount", "Teach the lab"],
+            "answer": "Offer a discount",
+            "rationale": "weekend cash",
+        }
+    ]
+
+    def fake_urlopen(_request: Request, timeout: object = None) -> _FakeResponse:
+        return _FakeResponse(_openai_envelope(payload))
+
+    _set_fake_key(monkeypatch)
+    monkeypatch.setattr("enablement_studio.engine.urllib.request.urlopen", fake_urlopen)
+    output, engine = generate(Product.ROLE, source)
+    assert engine is EngineName.LLM
+    assert isinstance(output, RoleEnablement)
+    assert output.invalid is True
+
+
+def test_llm_ae_title_on_id_source_does_not_skip_portability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from canned_ae_template import canned_ae_template_role
+
+    source = find_fixture("eval_instructional_designer_job.txt").read_text(
+        encoding="utf-8"
+    )
+    payload = canned_ae_template_role("Account Executive").to_dict()
+
+    def fake_urlopen(_request: Request, timeout: object = None) -> _FakeResponse:
+        return _FakeResponse(_openai_envelope(payload))
+
+    _set_fake_key(monkeypatch)
+    monkeypatch.setattr("enablement_studio.engine.urllib.request.urlopen", fake_urlopen)
+    output, engine = generate(Product.ROLE, source)
+    assert engine is EngineName.LLM
+    assert isinstance(output, RoleEnablement)
+    assert output.invalid is True
+
+
+def test_llm_ehr_money_coaching_falls_back_offline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = find_fixture("eval_ehr_skills_lab_call.txt").read_text(encoding="utf-8")
+    expected = generate_call(source)
+    payload = expected.to_dict()
+    payload["notes"][0]["body"] = (
+        "Ask three questions about how money moves today before you mention a rate."
+    )
+    payload["enablement_fix"]["fix"] = "Then—and only then—a rate card. Log it in the CRM."
+
+    def fake_urlopen(_request: Request, timeout: object = None) -> _FakeResponse:
+        return _FakeResponse(_openai_envelope(payload))
+
+    _set_fake_key(monkeypatch)
+    monkeypatch.setattr("enablement_studio.engine.urllib.request.urlopen", fake_urlopen)
+    output, engine = generate(Product.CALL, source)
+    assert engine is EngineName.OFFLINE
+    assert output == expected
+
+
+def test_llm_warehouse_buyer_rewrite_falls_back_offline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = find_fixture("eval_pallet_jack_lesson.md").read_text(encoding="utf-8")
+    expected = generate_critic(source)
+    payload = expected.to_dict()
+    payload["rewrite"]["replacement"] = (
+        "Paired teach-back: explain weekend cash to a cautious buyer."
+    )
+
+    def fake_urlopen(_request: Request, timeout: object = None) -> _FakeResponse:
+        return _FakeResponse(_openai_envelope(payload))
+
+    _set_fake_key(monkeypatch)
+    monkeypatch.setattr("enablement_studio.engine.urllib.request.urlopen", fake_urlopen)
+    output, engine = generate(Product.CRITIC, source)
+    assert engine is EngineName.OFFLINE
+    assert output == expected
 
 
 def test_eval_fixtures_stay_offline_without_keys(

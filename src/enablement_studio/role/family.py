@@ -8,6 +8,8 @@ _ENABLEMENT_TITLE = re.compile(
     r"instructional design|learning experience|\blxd\b|"
     r"customer education|customer training|"
     r"nurse educator|clinical educator|clinical instructor|"
+    r"nursing education|clinical education|patient educator|"
+    r"director of education|"
     r"director,?\s*training|training director|head of training|"
     r"onboarding specialist|learning designer|curriculum designer",
     re.I,

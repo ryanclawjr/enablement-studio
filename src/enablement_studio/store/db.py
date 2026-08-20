@@ -65,11 +65,59 @@ class Store:
         input_text: str,
         engine: EngineName,
         artifacts: dict[str, Any],
-        invalid: bool = False,
+        invalid: bool | None = None,
     ) -> SavedRun:
+        if invalid is None:
+            result = artifacts.get("result")
+            invalid = bool(isinstance(result, dict) and result.get("invalid"))
         project_id = self.get_or_create_project(project)
-        version = self.next_version(project_id, product)
         created = utc_now()
+        try:
+            return self._insert_run(
+                project_id=project_id,
+                project=project,
+                product=product,
+                title=title,
+                input_text=input_text,
+                engine=engine,
+                artifacts=artifacts,
+                invalid=invalid,
+                version=self.next_version(project_id, product),
+                created=created,
+            )
+        except sqlite3.IntegrityError:
+            try:
+                return self._insert_run(
+                    project_id=project_id,
+                    project=project,
+                    product=product,
+                    title=title,
+                    input_text=input_text,
+                    engine=engine,
+                    artifacts=artifacts,
+                    invalid=invalid,
+                    version=self.next_version(project_id, product),
+                    created=created,
+                )
+            except sqlite3.IntegrityError as exc:
+                raise ValueError(
+                    "could not save run; version already exists"
+                ) from exc
+
+    def _insert_run(
+        self,
+        *,
+        project_id: int,
+        project: str,
+        product: Product,
+        title: str,
+        input_text: str,
+        engine: EngineName,
+        artifacts: dict[str, Any],
+        invalid: bool,
+        version: int,
+        created: str,
+    ) -> SavedRun:
         with self.connect() as connection:
             cursor = connection.execute(
                 """

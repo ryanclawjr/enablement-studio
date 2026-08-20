@@ -37,7 +37,7 @@ PRODUCT.md constraints:
 2. Enablement / L&D / instructional design / customer-education / clinical-educator is one learner-facing family. Audience and nouns from the source. Use "SA teams they support" only if the source is about SAs.
 3. Seller / SE / field SA may use seller skills when the source is that job. An enablement partner who supports solution architects is not a field SA.
 4. Unknown family, empty skill graph, or a title-portable module must come back invalid (RoleEnablement.invalid / runs.invalid). Title-portable means swapping the title for Account Executive still reads as a coherent seller module.
-5. Stock lines — "before presenting price", "offer a discount", "weekend cash" — only if those nouns are in the source.
+5. Stock lines — "before presenting price", "offer a discount", "weekend cash", "cautious buyer" — only if those nouns are in the source. Classify the job family from the source text, not from a title you invent.
 6. Every objective verb appears in the graph. Practice and quiz measure those verbs.
 7. example_data is true when the source is labeled EXAMPLE DATA or fictional. If the source is a PUBLIC POSTING, say so in source_note and do not treat it as an application.
 """.strip()
@@ -64,7 +64,8 @@ PRODUCT.md constraints:
 4. A clean discovery call must not get "you pitched before you earned the right."
 5. An EHR skills lab must not get money / rate / CRM coaching.
 6. Speakers come from the transcript. A call that never mentions price does not get a discovery-before-rate drill unless a listed signal justifies it.
-7. example_data is true when the source is labeled EXAMPLE DATA or fictional.
+7. Payments voice ("how money moves", "rate card") only if THIS transcript is payments. A SaaS first meeting that names list price is not payments.
+8. example_data is true when the source is labeled EXAMPLE DATA or fictional.
 """.strip()
 
 CRITIC_SYSTEM_PROMPT = """
