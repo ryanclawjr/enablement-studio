@@ -245,14 +245,22 @@ def _listener_and_cue(hay: str, topic: str) -> tuple[str, str]:
 
 
 def _topic(objective_text: str) -> str:
-    match = re.search(
-        r"(interchange|authorization|settlement|discovery|pipeline|objection[^.]|"
-        r"pallet-jack|pallet jack|warehouse|ehr|medication)",
-        objective_text,
-        flags=re.I,
-    )
-    if match:
-        return match.group(1).lower()
+    for pattern in (
+        r"pallet-jack",
+        r"pallet jack",
+        r"interchange",
+        r"authorization",
+        r"settlement",
+        r"discovery",
+        r"pipeline",
+        r"objection[^.]*",
+        r"warehouse",
+        r"ehr",
+        r"medication",
+    ):
+        match = re.search(pattern, objective_text, flags=re.I)
+        if match:
+            return match.group(0).lower()
     words = [
         word
         for word in re.findall(r"[A-Za-z]{4,}", objective_text)
