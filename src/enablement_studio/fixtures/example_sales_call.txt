@@ -1,0 +1,27 @@
+EXAMPLE DATA — fictional sales call. Not a real customer recording.
+Harborline Payments and Maple Street Bakery are invented names.
+
+Call: Discovery call, Harborline Payments (example)
+Account Executive: Alex Rivera
+Prospect: Jordan Kim
+
+Alex Rivera: Hey Jordan, thanks for hopping on. I will give you a quick overview
+of Harborline and our pricing because we are running a promo this month —
+2.4 percent plus ten cents for most cards, which is a made-up sample rate and
+not a live offer. Most bakeries I talk to just want to switch fast.
+
+Jordan Kim: We are a two-location bakery. Weekends at the farmers market are
+when cash gets tight, and we had two chargebacks last month that I still do
+not understand.
+
+Alex Rivera: Totally. Let me walk you through the platform. We have a beautiful
+dashboard, same-day funding on some plans, and a rate that usually beats the
+guy down the street. I can send a deck. The promo ends soon so I would grab it.
+
+Jordan Kim: Who is the guy down the street? We use a local ISO. I need to know
+what happens to weekend payouts.
+
+Alex Rivera: You will love the dashboard. I will send pricing and we can
+reconnect whenever. Sound good?
+
+Jordan Kim: I guess I will look at the email.

@@ -1,0 +1,22 @@
+EXAMPLE DATA — fictional job posting. Not from a live employer.
+Do not treat company names, rates, or quotas below as real metrics.
+
+Job title: Account Executive, Harborline Payments (example)
+Company: Harborline Payments — a made-up merchant-services firm used only as sample text.
+
+About the role
+You will run first conversations with small-business owners who want a simpler
+card-processing setup. This posting is example copy for Enablement Studio demos.
+
+Responsibilities
+- Run discovery on current processors, payout timing, and chargeback pain
+- Map Harborline's (example) value to the buyer's weekend cash-flow
+- Demo only the checkout path that matches the notes from discovery
+- Handle price and "we already have a guy" objections without discounting first
+- Close on a dated next step and log evidence in the CRM
+- Forecast a small pipeline without inventing numbers
+
+Requirements
+- Comfort talking about authorization, settlement, and interchange in plain language
+- Written discovery notes a manager can coach from
+- No live customer book is required; this is example data only
