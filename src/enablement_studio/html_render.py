@@ -508,13 +508,13 @@ def _generate_inline_svg_graph(nodes: list[SkillNode], edges: list[SkillEdge]) -
         if len(label) > 16:
             label = label[:15] + "…"
         svg_parts.append(
-            f'<rect x="{x}" y="{y}" width="{node_width}" height="{node_height}" rx="6" fill="#161616" stroke="#2a2a2a" stroke-width="1.5"/>'
+            f'<rect x="{x}" y="{y}" width="{node_width}" height="{node_height}" rx="6" fill="#1C1C22" stroke="#2A2A33" stroke-width="1.5"/>'
         )
         svg_parts.append(
             f'<text x="{x + 8}" y="{y + 16}" font-family="ui-monospace, monospace" font-size="10" fill="#8a8a84">{_level_abbr(node.level)}</text>'
         )
         svg_parts.append(
-            f'<text x="{x + 8}" y="{y + 28}" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" font-weight="600" fill="#f4f4f1">{_e(label)}</text>'
+            f'<text x="{x + 8}" y="{y + 28}" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" font-weight="600" fill="#F5F5F4">{_e(label)}</text>'
         )
     svg_parts.append("</svg></div>")
     return "".join(svg_parts)

@@ -123,8 +123,12 @@ def _assert_source_table(body: str) -> None:
     assert "onboarding buddy" not in body.lower()
     assert "job → skill graph → 30-minute module" not in body
     assert 'class="outline object"' not in body
-    assert "#0d0d0d" in body or "#111" in body
-    assert "#fffd63" in body or "#F5C518" in body
+    assert "#16161D" in body
+    assert "#0B0B0E" in body
+    assert "#1C1C22" in body
+    assert "#FFE52F" in body
+    assert "#0d0d0d" not in body
+    assert "#fffd63" not in body
     assert "#f4f4f2" not in body
     assert "#3d5a80" not in body
     assert "Get Lifetime Access" not in body
