@@ -574,7 +574,7 @@ def test_enablement_frame_visible_for_designer(server) -> None:
     _assert_step_chrome(body, "graph")
     assert 'data-family="enablement"' in body
     assert 'data-frame="designer"' in body
-    assert "Northglass Academy" in body
+    assert "Instructional Designer" in body
     assert "storyboard" in body.lower() or "needs analysis" in body.lower()
 
 
