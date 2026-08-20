@@ -53,9 +53,7 @@ def render_page(
         template,
         {
             "{{body_class}}": _body_class(product),
-            "{{role_checked}}": "checked" if product is Product.ROLE else "",
-            "{{call_checked}}": "checked" if product is Product.CALL else "",
-            "{{critic_checked}}": "checked" if product is Product.CRITIC else "",
+            "{{product_value}}": _e(product.value),
             "{{role_bench}}": _bench_class(product, Product.ROLE),
             "{{call_bench}}": _bench_class(product, Product.CALL),
             "{{critic_bench}}": _bench_class(product, Product.CRITIC),
@@ -68,7 +66,7 @@ def render_page(
             "{{result_block}}": (
                 ""
                 if compare_run is not None and compare_output is not None and run is not None
-                else _result_block(product, output, run, text)
+                else _result_block(product, output, run, text, project)
             ),
             "{{compare_block}}": _compare_block(
                 run, output, compare_run, compare_output
@@ -128,21 +126,10 @@ def _result_block(
     output: ProductOutput | None,
     run: SavedRun | None,
     source: str,
+    project: str,
 ) -> str:
     if output is None:
-        if product is Product.ROLE:
-            empty = (
-                "Nothing on the board yet. Sit a JD, SOP, or policy on the table "
-                "and run Role, or load the Harborline example (EXAMPLE DATA)."
-            )
-        elif product is Product.CALL:
-            empty = "Nothing on the board yet. Sit a transcript on the table and run Call."
-        elif product is Product.CRITIC:
-            empty = "Nothing on the board yet. Sit an outline on the table and run Critic."
-        else:
-            never: Product = product
-            raise ValueError(f"unsupported product: {never}")
-        return f'<div class="empty-board"><p>{_e(empty)}</p></div>'
+        return _empty_board(product, project)
     match output:
         case RoleEnablement():
             return _render_role_studio(output, run, source)
@@ -166,6 +153,41 @@ def _result_block(
         f"{meta}"
         f"{body}"
         "</article>"
+    )
+
+
+def _empty_board(product: Product, project: str) -> str:
+    if product is Product.ROLE:
+        empty = (
+            "Nothing on the board yet. Sit a JD, SOP, or policy on the table "
+            "and run Role, or run the Harborline example (EXAMPLE DATA)."
+        )
+        label = "Run Harborline example (EXAMPLE DATA)"
+    elif product is Product.CALL:
+        empty = (
+            "Nothing on the board yet. Sit a transcript on the table and run Call, "
+            "or run the Harborline call example (EXAMPLE DATA)."
+        )
+        label = "Run Harborline call example (EXAMPLE DATA)"
+    elif product is Product.CRITIC:
+        empty = (
+            "Nothing on the board yet. Sit an outline on the table and run Critic, "
+            "or run the Harborline lesson example (EXAMPLE DATA)."
+        )
+        label = "Run Harborline lesson example (EXAMPLE DATA)"
+    else:
+        never: Product = product
+        raise ValueError(f"unsupported product: {never}")
+    return (
+        '<div class="empty-board">'
+        f"<p>{_e(empty)}</p>"
+        f'<form method="post" action="/" class="demo-run">'
+        f'<input type="hidden" name="product" value="{_e(product.value)}">'
+        f'<input type="hidden" name="project" value="{_e(project)}">'
+        f'<input type="hidden" name="action" value="demo">'
+        f'<button class="run" type="submit">{_e(label)}</button>'
+        "</form>"
+        "</div>"
     )
 
 

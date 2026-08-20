@@ -85,13 +85,6 @@
       padding: 1rem 1.05rem 1.15rem;
     }
     .source-panel { position: sticky; top: 0.75rem; }
-    fieldset {
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      margin: 0 0 0.85rem;
-      padding: 0.55rem 0.7rem;
-    }
-    .products { display: flex; flex-wrap: wrap; gap: 0.55rem 0.9rem; }
     label.stack { display: block; margin: 0 0 0.85rem; }
     input[type="text"], textarea, select {
       display: block;
@@ -105,16 +98,25 @@
     }
     textarea { min-height: 18rem; resize: vertical; }
     .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
-    button.run, .compare-form button {
+    button.run, .compare-form button, button.llm {
       appearance: none;
       border: 0;
       border-radius: 6px;
       padding: 0.55rem 0.95rem;
       font: inherit;
       font-weight: 600;
+    }
+    button.run, .compare-form button {
       color: #fff;
       background: var(--accent);
     }
+    button.llm {
+      color: var(--ink);
+      background: #fff;
+      border: 1px solid var(--line);
+    }
+    .run-note { margin: 0.65rem 0 0; }
+    .demo-run { margin: 0.75rem 0 0; border: 0; padding: 0; background: transparent; }
     .demos { margin: 0.85rem 0 0; }
     .demos a { margin-right: 0.75rem; }
     .error, .banner, .invalid, .empty-board {
@@ -208,7 +210,7 @@
     <header>
       <p class="eyebrow">Enablement Studio · this machine</p>
       <h1>Role studio</h1>
-      <p class="lede">Sit a job, SOP, or policy on the table. Role already is the course-design assistant: a skill graph, objectives, a 30-minute outline, practice, and an application quiz grounded in that source. Call and Critic stay on the other benches. No login. No API key required.</p>
+      <p class="lede">Sit a job, SOP, or policy on the table. Role already is the course-design assistant: a skill graph, objectives, a 30-minute outline, practice, and an application quiz grounded in that source. Call and Critic stay on the other benches. Run is offline so this tab stays alive. Try LLM is optional polish. No login. No API key required.</p>
       <nav class="benches" aria-label="Products">
         <a class="{{role_bench}}" href="/?product=role&amp;project={{bench_project}}">Role → Enablement</a>
         <a class="{{call_bench}}" href="/?product=call&amp;project={{bench_project}}">Call → Coach</a>
@@ -220,14 +222,7 @@
       <section class="source-panel">
         <h2>{{source_heading}}</h2>
         <form method="post" action="/">
-          <fieldset>
-            <legend>Product</legend>
-            <div class="products">
-              <label><input type="radio" name="product" value="role" {{role_checked}}> Role → Enablement</label>
-              <label><input type="radio" name="product" value="call" {{call_checked}}> Call → Coach</label>
-              <label><input type="radio" name="product" value="critic" {{critic_checked}}> Lesson critic</label>
-            </div>
-          </fieldset>
+          <input type="hidden" name="product" value="{{product_value}}">
           <label class="stack">Project
             <input type="text" name="project" value="{{project}}" autocomplete="off">
           </label>
@@ -235,9 +230,11 @@
             <textarea name="text" spellcheck="false">{{text}}</textarea>
           </label>
           <div class="actions">
-            <button class="run" type="submit">Run</button>
+            <button class="run" type="submit" name="action" value="run">Run</button>
+            <button class="llm" type="submit" name="action" value="llm">Try LLM</button>
           </div>
-          <p class="demos hint">Load demo (EXAMPLE DATA fixtures, not a live employer):
+          <p class="hint run-note">Run uses the offline engine and returns a board without waiting on a network. Try LLM is optional polish and does not freeze other tabs.</p>
+          <p class="demos hint">Load demo into the table (EXAMPLE DATA fixtures, not a live employer):
             <a href="/?product=role&amp;demo=1&amp;project={{bench_project}}">Role</a>
             <a href="/?product=call&amp;demo=1&amp;project={{bench_project}}">Call</a>
             <a href="/?product=critic&amp;demo=1&amp;project={{bench_project}}">Critic</a>

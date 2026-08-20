@@ -195,6 +195,21 @@ def test_llm_failures_fall_back_offline(
     assert output == expected
 
 
+def test_force_offline_skips_configured_llm(
+    monkeypatch: pytest.MonkeyPatch, job_text: str
+) -> None:
+    def boom(*args: object, **kwargs: object) -> None:
+        raise AssertionError("force_offline must not open the network")
+
+    _set_fake_key(monkeypatch)
+    monkeypatch.setattr("enablement_studio.engine.urllib.request.urlopen", boom)
+    assert llm_configured() is True
+    output, engine = generate(Product.ROLE, job_text, force_offline=True)
+    assert engine is EngineName.OFFLINE
+    assert isinstance(output, RoleEnablement)
+    assert output.skill_graph.nodes
+
+
 def test_no_key_never_opens_network(
     monkeypatch: pytest.MonkeyPatch, job_text: str
 ) -> None:

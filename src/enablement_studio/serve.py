@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 import sys
 from html import escape
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse
 
@@ -43,7 +43,9 @@ def serve(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> None:
 
 
 def make_server(host: str = DEFAULT_HOST, port: int = 0) -> HTTPServer:
-    return HTTPServer((host, port), EnablementHandler)
+    httpd = ThreadingHTTPServer((host, port), EnablementHandler)
+    httpd.daemon_threads = True
+    return httpd
 
 
 class EnablementHandler(BaseHTTPRequestHandler):
@@ -114,22 +116,33 @@ class EnablementHandler(BaseHTTPRequestHandler):
         except ValueError as exc:
             self._send(400, _form_error(str(exc)))
             return
-        text = fields.get("text", "")
-        if not text.strip():
-            self._send(400, _form_error("provide text to run", fields=fields))
-            return
         product = _product_or_none(fields.get("product", ""))
         if product is None:
-            self._send(400, _form_error("unknown product", fields=fields))
+            self._send(200, _form_error("Choose Role, Call, or Critic from the benches.", fields=fields))
             return
         project = fields.get("project", "").strip() or DEFAULT_PROJECT
+        action = fields.get("action", "run").strip() or "run"
+        text = fields.get("text", "")
+        if action == "demo":
+            try:
+                text = demo_text(product.value)
+            except (FileNotFoundError, ValueError) as exc:
+                self._send(200, _form_error(str(exc), fields=fields))
+                return
+        if not text.strip():
+            self._send(200, _form_error(_empty_run_message(product), fields=fields))
+            return
         store = Store(default_db_path())
         try:
             _output, _engine, run = generate_and_save(
-                product, text, project=project, store=store
+                product,
+                text,
+                project=project,
+                store=store,
+                force_offline=action != "llm",
             )
         except ValueError as exc:
-            self._send(400, _form_error(str(exc), fields=fields))
+            self._send(200, _form_error(str(exc), fields=fields))
             return
         self._redirect(f"/?{urlencode({'run': str(run.id)})}")
 
@@ -201,6 +214,17 @@ def _product_or_none(value: str | None) -> Product | None:
         return Product(value)
     except ValueError:
         return None
+
+
+def _empty_run_message(product: Product) -> str:
+    if product is Product.ROLE:
+        return "Sit a JD, SOP, or policy on the table."
+    if product is Product.CALL:
+        return "Sit a transcript on the table."
+    if product is Product.CRITIC:
+        return "Sit an outline or storyboard on the table."
+    never: Product = product
+    raise ValueError(f"unsupported product: {never}")
 
 
 def _form_error(message: str, fields: dict[str, str] | None = None) -> str:

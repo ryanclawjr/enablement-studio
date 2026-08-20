@@ -51,9 +51,14 @@ def llm_chat_body(product: Product, text: str) -> dict[str, Any]:
     }
 
 
-def generate(product: Product, text: str) -> tuple[ProductOutput, EngineName]:
+def generate(
+    product: Product,
+    text: str,
+    *,
+    force_offline: bool = False,
+) -> tuple[ProductOutput, EngineName]:
     offline = _offline(product, text)
-    if not llm_configured():
+    if force_offline or not llm_configured():
         return offline, EngineName.OFFLINE
     try:
         payload = _llm_json(product, text)

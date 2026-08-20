@@ -53,8 +53,9 @@ def generate_and_save(
     *,
     project: str,
     store: Store | None = None,
+    force_offline: bool = False,
 ) -> tuple[ProductOutput, EngineName, SavedRun]:
-    output, engine = generate(product, text)
+    output, engine = generate(product, text, force_offline=force_offline)
     target = store if store is not None else Store(default_db_path())
     run = target.save_run(
         project=project,
