@@ -100,70 +100,83 @@ def _assert_primary_object(body: str, present: str, *absent: str) -> None:
         assert f'class="{name} object"' not in body
 
 
-def test_get_home_is_tablework_landing(server) -> None:
-    status, body, _location = _http(server, "GET", "/")
-    assert status == 200
-    assert "<h1>Tablework</h1>" in body
-    assert "Enablement Studio" not in body
-    assert "Paste a job or SOP, walk a module from that source." in body
-    assert 'href="/role"' in body
-    assert "job → skill graph → 30-minute module" in body
-    assert "Call" in body
-    assert "Critic" in body
-    assert "Next" in body
-    assert "this machine · 127.0.0.1" in body
-    assert "offline" in body
-    assert "onboarding buddy" not in body.lower()
-    assert 'type="radio"' not in body
-    assert "<textarea" not in body
-    assert "Board is empty" not in body
-    assert 'name="text"' not in body
-    assert "Run Harborline" not in body
-
-
-def test_get_role_is_source_step_when_empty(server) -> None:
-    status, body, _location = _http(server, "GET", "/role")
-    assert status == 200
+def _assert_source_table(body: str) -> None:
     assert "Tablework" in body
-    _assert_step_chrome(body, "source")
-    assert "Paste a job or SOP, or Run Harborline." in body
-    assert "Board is empty" not in body
+    assert "<h1" in body
+    h1_start = body.index("<h1")
+    h1 = body[h1_start : body.index("</h1>", h1_start)]
+    assert "Tablework" in h1
+    assert "Enablement Studio" not in h1
+    assert "<textarea" in body
+    assert 'name="text"' in body
     assert "Run Harborline" in body
     assert "EXAMPLE DATA" in body
     assert 'name="project"' in body
     assert 'name="action" value="run"' in body
     assert 'name="action" value="llm"' in body
-    assert 'type="radio"' not in body
-    assert 'class="outline object"' not in body
-
-
-def test_old_product_query_redirects(server) -> None:
-    status, _body, location = _http(server, "GET", "/?product=role", follow=False)
-    assert status == 302
-    assert location == "/role"
-    status, body, _location = _http(server, "GET", "/?product=role")
-    assert status == 200
     _assert_step_chrome(body, "source")
+    assert 'class="door' not in body
+    assert body.count("this machine") == 1
+    assert "this machine · 127.0.0.1 · offline" in body
+    assert "Board is empty" not in body
+    assert 'type="radio"' not in body
+    assert "onboarding buddy" not in body.lower()
+    assert "job → skill graph → 30-minute module" not in body
+    assert 'class="outline object"' not in body
+    assert "#16161D" in body
+    assert "#0B0B0E" in body
+    assert "#1C1C22" in body
+    assert "#FFE52F" in body
+    assert "#0d0d0d" not in body
+    assert "#fffd63" not in body
+    assert "#f4f4f2" not in body
+    assert "#3d5a80" not in body
+    assert "Get Lifetime Access" not in body
+    assert "Sign in" not in body
+
+
+def test_get_home_is_role_source(server) -> None:
+    status, body, _location = _http(server, "GET", "/")
+    assert status == 200
+    _assert_source_table(body)
+
+
+def test_get_role_is_same_source_table(server) -> None:
+    status, _body, location = _http(server, "GET", "/role", follow=False)
+    assert status in {200, 302}
+    if status == 302:
+        assert location == "/" or (location or "").startswith("/?")
+    status, body, _location = _http(server, "GET", "/role")
+    assert status == 200
+    _assert_source_table(body)
+
+
+def test_old_product_query_stays_on_table(server) -> None:
+    status, body, location = _http(server, "GET", "/?product=role", follow=False)
+    assert status == 200
+    assert location is None
+    _assert_source_table(body)
     status, _body, location = _http(server, "GET", "/?product=call", follow=False)
     assert status == 302
     assert location == "/?next=call"
     status, body, _location = _http(server, "GET", "/?product=call")
     assert status == 200
-    assert "<h1>Tablework</h1>" in body
+    _assert_source_table(body)
     assert "Call is next." in body
     status, _body, location = _http(server, "GET", "/?product=critic", follow=False)
     assert status == 302
     assert location == "/?next=critic"
 
 
-def test_call_and_critic_doors_redirect_to_landing(server) -> None:
+def test_call_critic_next_keeps_the_table(server) -> None:
     status, _body, location = _http(server, "GET", "/call", follow=False)
     assert status == 302
     assert location == "/?next=call"
     status, body, _location = _http(server, "GET", "/critic")
     assert status == 200
+    _assert_source_table(body)
     assert "Critic is next." in body
-    assert "<h1>Tablework</h1>" in body
+    assert 'class="door' not in body
 
 
 def test_make_server_is_threaded() -> None:
@@ -248,7 +261,8 @@ def test_run_with_slow_llm_env_returns_offline_board(
     assert time.monotonic() - get_started < 2
     assert get_status == 200
     assert "Tablework" in home
-    assert "<textarea" not in home
+    assert "<textarea" in home
+    assert 'class="door' not in home
 
 
 def test_in_flight_llm_does_not_block_get(
@@ -444,11 +458,13 @@ def test_get_demo_fills_harborline_fixture(server) -> None:
     assert "EXAMPLE DATA" in body
     _assert_step_chrome(body, "source")
     assert Store(default_db_path()).list_runs() == []
-    status, _body, location = _http(
+    status, body, location = _http(
         server, "GET", "/?product=role&demo=1", follow=False
     )
-    assert status == 302
-    assert location == "/role?demo=1"
+    assert status == 200
+    assert location is None
+    assert "Harborline Payments" in body
+    _assert_step_chrome(body, "source")
 
 
 def test_invalid_role_stops_walk_on_graph(server) -> None:
@@ -605,7 +621,7 @@ def test_get_overflow_compare_id_is_404(server, job_text: str) -> None:
     assert "not found" in body.lower()
 
 
-def test_old_run_query_redirects_to_role(server, job_text: str) -> None:
+def test_old_run_query_stays_on_home_graph(server, job_text: str) -> None:
     _http(
         server,
         "POST",
@@ -613,6 +629,8 @@ def test_old_run_query_redirects_to_role(server, job_text: str) -> None:
         body=urlencode({"product": "role", "text": job_text, "project": "default"}),
     )
     run = Store(default_db_path()).list_runs()[0]
-    status, _body, location = _http(server, "GET", f"/?run={run.id}", follow=False)
-    assert status == 302
-    assert location == f"/role?run={run.id}"
+    status, body, location = _http(server, "GET", f"/?run={run.id}", follow=False)
+    assert status == 200
+    assert location is None
+    _assert_step_chrome(body, "graph")
+    _assert_primary_object(body, "skill-graph", "outline", "practice", "quiz")

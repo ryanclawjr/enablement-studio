@@ -27,7 +27,6 @@ from enablement_studio.textutil import extract_title
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 TEMPLATE_PATH = TEMPLATE_DIR / "page.html"
-LANDING_PATH = TEMPLATE_DIR / "landing.html"
 RECENT_LIMIT = 20
 
 ROLE_STEPS = ("source", "graph", "objectives", "outline", "practice", "quiz")
@@ -92,14 +91,6 @@ def resolve_role_step(
     return requested
 
 
-def render_landing(*, notice: str | None = None) -> str:
-    template = LANDING_PATH.read_text(encoding="utf-8")
-    notice_html = ""
-    if notice:
-        notice_html = f'<p class="notice" role="status">{_e(notice)}</p>'
-    return _fill(template, {"{{notice_block}}": notice_html})
-
-
 def render_page(
     *,
     product: Product,
@@ -112,18 +103,23 @@ def render_page(
     compare_output: ProductOutput | None = None,
     compare_run: SavedRun | None = None,
     step: str | None = None,
+    notice: str | None = None,
 ) -> str:
     template = TEMPLATE_PATH.read_text(encoding="utf-8")
     resolved = resolve_role_step(step, run=run, output=output)
     has_key = llm_configured()
     comparing = compare_run is not None and compare_output is not None and run is not None
+    body_class = f"product-role step-{resolved}"
+    if comparing:
+        body_class += " comparing"
     return _fill(
         template,
         {
             "{{page_title}}": _e(_page_title(resolved)),
-            "{{body_class}}": _e(f"product-role step-{resolved}"),
+            "{{body_class}}": _e(body_class),
             "{{project}}": _e(project),
             "{{path_chrome}}": _path_chrome(resolved, run, output),
+            "{{notice_block}}": _notice_block(notice),
             "{{source_strip}}": (
                 ""
                 if resolved == "source"
@@ -175,22 +171,22 @@ def _source_form(text: str, project: str, has_key: bool) -> str:
     llm_disabled = "" if has_key else " disabled"
     llm_caption = "" if has_key else ' <span class="no-key-caption">(no key)</span>'
     return (
-        '<form method="post" action="/role" class="role-form">'
+        '<form method="post" action="/" class="role-form">'
         '<input type="hidden" name="product" value="role">'
-        '<p class="source-copy">Paste a job or SOP, or Run Harborline.</p>'
-        '<label class="stack">Project'
-        f'<input type="text" name="project" value="{_e(project)}" autocomplete="off">'
-        "</label>"
         '<label class="stack">Job, SOP, or policy'
         f'<textarea name="text" spellcheck="false" placeholder="Paste a job or SOP...">{_e(text)}</textarea>'
+        "</label>"
+        '<label class="stack">Project'
+        f'<input type="text" name="project" value="{_e(project)}" autocomplete="off">'
         "</label>"
         '<div class="actions">'
         '<button class="run" type="submit" name="action" value="run">Run</button>'
         f'<button class="llm" type="submit" name="action" value="llm"{llm_disabled}>LLM{llm_caption}</button>'
-        '<button class="llm" type="submit" name="action" value="demo">Run Harborline</button>'
-        '<span class="hint">EXAMPLE DATA</span>'
         "</div>"
-        '<p class="hint">Run uses the deterministic offline engine. LLM is optional.</p>'
+        '<p class="harborline">'
+        '<button class="text-action" type="submit" name="action" value="demo">Run Harborline</button>'
+        " · EXAMPLE DATA"
+        "</p>"
         "</form>"
     )
 
@@ -211,7 +207,7 @@ def _source_strip(
         f'<span class="source-strip-title">{_e(title)}</span>'
         f'<pre class="source-strip-preview">{_e(preview)}</pre>'
         "</summary>"
-        '<form method="post" action="/role" class="role-form">'
+        '<form method="post" action="/" class="role-form">'
         '<input type="hidden" name="product" value="role">'
         f'<input type="hidden" name="project" value="{_e(project)}">'
         f'<textarea name="text" spellcheck="false">{_e(text)}</textarea>'
@@ -236,14 +232,14 @@ def _step_board(
         return (
             f'<div class="step-view" data-step="source">'
             "<h2>Source</h2>"
-            f"{_source_form(text, project, has_key)}"
+            f'<div class="object source-object">{_source_form(text, project, has_key)}</div>'
             "</div>"
         )
     if not isinstance(output, RoleEnablement):
         return (
             f'<div class="step-view" data-step="source">'
             "<h2>Source</h2>"
-            f"{_source_form(text, project, has_key)}"
+            f'<div class="object source-object">{_source_form(text, project, has_key)}</div>'
             "</div>"
         )
     inner = _role_step_inner(step, output, run, text)
@@ -280,9 +276,7 @@ def _role_step_object(step: str, output: RoleEnablement) -> str:
 def _step_nav(step: str, run: SavedRun | None, output: ProductOutput | None) -> str:
     current_idx = ROLE_STEPS.index(step)
     parts: list[str] = []
-    if step == "source":
-        parts.append('<a class="btn-action back" href="/">Back</a>')
-    elif run is not None and current_idx > 0:
+    if step != "source" and run is not None and current_idx > 0:
         prev = ROLE_STEPS[current_idx - 1]
         parts.append(
             f'<a class="btn-action back" href="{_e(role_path(run.id, prev))}">Back</a>'
@@ -317,6 +311,12 @@ def _fill(template: str, mapping: dict[str, str]) -> str:
         pieces.append(template[cursor:found_at])
         pieces.append(mapping[found_token])
         cursor = found_at + len(found_token)
+
+
+def _notice_block(notice: str | None) -> str:
+    if not notice:
+        return ""
+    return f'<p class="notice" role="status">{_e(notice)}</p>'
 
 
 def _error_block(error: str | None) -> str:
@@ -485,7 +485,7 @@ def _generate_inline_svg_graph(nodes: list[SkillNode], edges: list[SkillEdge]) -
         f'<svg class="graph-svg" viewBox="0 0 {total_width} {total_height}" width="{total_width}" height="{total_height}" xmlns="http://www.w3.org/2000/svg">',
         "<defs>",
         '  <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">',
-        '    <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#6b6860"/>',
+        '    <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#8a8a84"/>',
         "  </marker>",
         "</defs>",
     ]
@@ -495,11 +495,11 @@ def _generate_inline_svg_graph(nodes: list[SkillNode], edges: list[SkillEdge]) -
         y = 35
         rel = edge_label_map.get(nodes[i].id, "then")
         svg_parts.append(
-            f'<line x1="{x1}" y1="{y}" x2="{x2}" y2="{y}" stroke="#e4e2dc" stroke-width="2" marker-end="url(#arrow)" />'
+            f'<line x1="{x1}" y1="{y}" x2="{x2}" y2="{y}" stroke="#2a2a2a" stroke-width="2" marker-end="url(#arrow)" />'
         )
         mid_x = (x1 + x2) / 2
         svg_parts.append(
-            f'<text x="{mid_x}" y="{y - 6}" font-family="ui-sans-serif, system-ui, sans-serif" font-size="10" fill="#6b6860" text-anchor="middle">{_e(rel)}</text>'
+            f'<text x="{mid_x}" y="{y - 6}" font-family="ui-sans-serif, system-ui, sans-serif" font-size="10" fill="#8a8a84" text-anchor="middle">{_e(rel)}</text>'
         )
     for i, node in enumerate(nodes):
         x = 20 + i * (node_width + gap)
@@ -508,13 +508,13 @@ def _generate_inline_svg_graph(nodes: list[SkillNode], edges: list[SkillEdge]) -
         if len(label) > 16:
             label = label[:15] + "…"
         svg_parts.append(
-            f'<rect x="{x}" y="{y}" width="{node_width}" height="{node_height}" rx="6" fill="#ffffff" stroke="#e4e2dc" stroke-width="1.5"/>'
+            f'<rect x="{x}" y="{y}" width="{node_width}" height="{node_height}" rx="6" fill="#1C1C22" stroke="#2A2A33" stroke-width="1.5"/>'
         )
         svg_parts.append(
-            f'<text x="{x + 8}" y="{y + 16}" font-family="ui-monospace, monospace" font-size="10" fill="#6b6860">{_level_abbr(node.level)}</text>'
+            f'<text x="{x + 8}" y="{y + 16}" font-family="ui-monospace, monospace" font-size="10" fill="#8a8a84">{_level_abbr(node.level)}</text>'
         )
         svg_parts.append(
-            f'<text x="{x + 8}" y="{y + 28}" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" font-weight="600" fill="#1a1916">{_e(label)}</text>'
+            f'<text x="{x + 8}" y="{y + 28}" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" font-weight="600" fill="#F5F5F4">{_e(label)}</text>'
         )
     svg_parts.append("</svg></div>")
     return "".join(svg_parts)

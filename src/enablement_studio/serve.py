@@ -5,10 +5,9 @@ import sys
 from html import escape
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from typing import Any
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import parse_qs, urlparse
 
 from enablement_studio.html_render import (
-    render_landing,
     render_page,
     resolve_role_step,
     role_path,
@@ -64,11 +63,8 @@ class EnablementHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = _normalize_path(parsed.path)
         query = parse_qs(parsed.query, keep_blank_values=True)
-        if path == "/":
-            self._get_home(query)
-            return
-        if path == "/role":
-            self._get_role(query)
+        if path in {"/", "/role"}:
+            self._get_studio(query)
             return
         if path == "/call":
             self._redirect("/?next=call", status=302)
@@ -94,43 +90,25 @@ class EnablementHandler(BaseHTTPRequestHandler):
             return
         if path == "/":
             product = _product_or_none(fields.get("product", ""))
-            if product is not Product.ROLE:
-                self._redirect("/", status=302)
+            if product in {Product.CALL, Product.CRITIC}:
+                self._redirect(f"/?next={product.value}", status=302)
                 return
         self._post_role(fields)
 
     def log_message(self, fmt: str, *args: Any) -> None:
         return None
 
-    def _get_home(self, query: dict[str, list[str]]) -> None:
+    def _get_studio(self, query: dict[str, list[str]]) -> None:
         product = _product_or_none(_first(query, "product"))
-        if product is Product.ROLE:
-            self._redirect(_legacy_role_location(query), status=302)
-            return
         if product in {Product.CALL, Product.CRITIC}:
             self._redirect(f"/?next={product.value}", status=302)
             return
-        run_raw = _first(query, "run")
-        if run_raw:
-            try:
-                run = Store(default_db_path()).get_run(int(run_raw))
-            except (KeyError, ValueError, OverflowError, sqlite3.Error):
-                self._send(404, _error_page(f"run {run_raw} not found"))
-                return
-            if run.product is Product.ROLE:
-                self._redirect(_legacy_role_location(query), status=302)
-                return
-            self._redirect(f"/?next={run.product.value}", status=302)
-            return
-        next_raw = _first(query, "next")
         notice = None
+        next_raw = _first(query, "next")
         if next_raw == Product.CALL.value:
             notice = NEXT_NOTE[Product.CALL]
         elif next_raw == Product.CRITIC.value:
             notice = NEXT_NOTE[Product.CRITIC]
-        self._send(200, render_landing(notice=notice))
-
-    def _get_role(self, query: dict[str, list[str]]) -> None:
         store = Store(default_db_path())
         project = _first(query, "project") or DEFAULT_PROJECT
         text = ""
@@ -177,6 +155,7 @@ class EnablementHandler(BaseHTTPRequestHandler):
             compare_output=compare_output,
             compare_run=compare_run,
             step=step,
+            notice=notice,
         )
         self._send(200, body)
 
@@ -239,17 +218,6 @@ def _normalize_path(path: str) -> str:
     if path != "/" and path.endswith("/"):
         return path.rstrip("/") or "/"
     return path or "/"
-
-
-def _legacy_role_location(query: dict[str, list[str]]) -> str:
-    params: dict[str, str] = {}
-    for key in ("project", "demo", "run", "compare", "step"):
-        value = _first(query, key)
-        if value is not None:
-            params[key] = value
-    if not params:
-        return "/role"
-    return "/role?" + urlencode(params)
 
 
 def _csrf_ok(handler: EnablementHandler) -> bool:
