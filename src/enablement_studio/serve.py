@@ -24,6 +24,7 @@ DEFAULT_PROJECT = "default"
 MAX_BODY_BYTES = 1_000_000
 STATIC_ROOT = Path(__file__).resolve().parent / "static"
 STATIC_TYPES = {
+    ".woff": "font/woff",
     ".woff2": "font/woff2",
     ".txt": "text/plain; charset=utf-8",
 }

@@ -142,22 +142,36 @@ def _assert_source_table(body: str) -> None:
     assert 'class="collection"' in body
     assert "version-dots" in body
     assert "document-sheet" in body
-    assert "#0E0E12" in body
-    assert "#16161D" in body
-    assert "#2A2A33" in body
-    assert "#FFE52F" in body
-    assert "64px 64px" in body
-    assert "rgba(255, 255, 255, 0.045)" in body
-    assert "240ms ease" in body
-    assert "translateY(-2px)" in body
+    assert "#16161d" in body
+    assert "#1d1d25" in body
+    assert "#ffe52f" in body
+    assert "#f6f6f6" in body
+    assert "#757575" in body
+    assert "#191a1d" in body
+    assert "rgba(236, 236, 236, 0.08)" in body
+    assert "rgba(109, 112, 130, 0.21)" in body
+    assert "rgba(132, 132, 132, 0.25)" in body
+    assert "0 20px 50px rgba(255, 242, 80, 0.34)" in body
+    assert "400ms ease" in body
+    assert "80px 80px" in body
+    assert "gap: 16px" in body
+    assert "Instrument Sans" in body
+    assert "/static/fonts/instrument-sans-latin-400-normal.woff" in body
+    assert "translateY(-2px)" not in body
+    assert "translateY(-1px)" not in body
     assert "font: 13px/1.45" not in body
+    assert "13px/1.45" not in body
+    assert "system-ui" not in body
+    assert "Outfit" not in body
+    assert "Syne" not in body
+    assert "#0E0E12" not in body
+    assert "BGG.svg" not in body
+    assert "<canvas" not in body
     assert "minmax(0, 42rem) 12.5rem" not in body
     assert 'aside class="versions"' not in body
     assert 'class="path-step' not in body
     assert "fonts.googleapis.com" not in body
     assert "fonts.gstatic.com" not in body
-    assert "/static/fonts/outfit-latin-400-normal.woff2" in body
-    assert "/static/fonts/syne-latin-700-normal.woff2" in body
     assert "#0d0d0d" not in body
     assert "#fffd63" not in body
     assert "#f4f4f2" not in body
@@ -179,12 +193,12 @@ def test_local_fonts_are_served(server) -> None:
     host, port = server.server_address
     conn = http.client.HTTPConnection(host, port, timeout=15)
     try:
-        conn.request("GET", "/static/fonts/outfit-latin-400-normal.woff2")
+        conn.request("GET", "/static/fonts/instrument-sans-latin-400-normal.woff")
         response = conn.getresponse()
         assert response.status == 200
-        assert "font/woff2" in (response.getheader("Content-Type") or "")
+        assert "font/woff" in (response.getheader("Content-Type") or "")
         payload = response.read()
-        assert payload.startswith(b"wOF2")
+        assert payload.startswith(b"wOFF")
     finally:
         conn.close()
     status, _body, _location = _http(server, "GET", "/static/../engine.py")
