@@ -1,5 +1,7 @@
 # Enablement Studio
 
+Tablework is the product name. The repo and package stay enablement-studio.
+
 Local-first instructional design tools. One Python CLI, one SQLite file, three products.
 
 I automated the work I used to do by hand as an ISD: turn a messy job or SOP into a skill graph and a 30-minute module, turn a transcript into coaching notes, and score whether a lesson's activity and quiz actually measure the objective. Each product is a specialist with a deterministic offline path. Versions land in a local database so you can list, show, and compare runs.
@@ -56,13 +58,15 @@ enablement compare 1 2
 
 ## Local UI
 
-Same three products, same SQLite file, no API key.
+Same three products, same SQLite file, no API key. The product on the page is **Tablework**.
 
 ```bash
 enablement serve
 ```
 
-That binds **127.0.0.1:8765** (loopback only; pass `--host` / `--port` to change). `--host 0.0.0.0` prints a warning: stored job postings and transcripts would be on the LAN with no auth. Open http://127.0.0.1:8765. Role is the studio: source stays on the table after a run, and read the skill graph, objectives, 30-minute outline, practice, and application quiz. **Run is offline** and returns a board without waiting on a network, even if `ENABLEMENT_LLM_API_KEY` is set. LLM is optional polish on the same `generate()` hook and must not freeze other tabs. Source stays visible. Job family and EnablementFrame (enablement family only) are labeled. Invalid Role runs are called in plain English. An empty Run stays on the studio with that English validation on the board. History is this project and product; two Role runs can be compared. Call and Critic stay on the other benches. An empty Role board has one click to run the Harborline example (EXAMPLE DATA). POSTs from a foreign Origin or Referer are rejected; curl and same-origin form posts still work. Run writes to the same `data/enablement.db` the CLI uses. There is no login and no cloud database.
+That binds **127.0.0.1:8765** (loopback only; pass `--host` / `--port` to change). `--host 0.0.0.0` prints a warning: stored job postings and transcripts would be on the LAN with no auth. Open http://127.0.0.1:8765.
+
+`/` is the landing: Tablework, one sentence, a Role door, and Call/Critic marked next. `/role` is a guided path — Source, Graph, Objectives, Outline, Practice, Quiz — not a dump of all five objects. One `generate()` still returns the whole Role module; the UI reveals it one step at a time. After Run, you land on Graph. Opening `/role` with no run is Source. Harborline (EXAMPLE DATA) is one click from Source. **Run is offline** and returns a board without waiting on a network, even if `ENABLEMENT_LLM_API_KEY` is set. LLM is optional polish on the same `generate()` hook and must not freeze other tabs. Source stays a collapsed strip after a run. Job family and EnablementFrame (enablement family only) are labeled on Graph. Invalid Role runs stop the walk on Graph in plain English. An empty Run stays on Source with that English validation. History is this project and product; two Role runs can be compared. Call and Critic are next (no walkthrough yet). POSTs from a foreign Origin or Referer are rejected; curl and same-origin form posts still work. Run writes to the same `data/enablement.db` the CLI uses. There is no login and no cloud database.
 
 ## Sample data
 

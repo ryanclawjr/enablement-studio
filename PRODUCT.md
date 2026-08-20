@@ -2,7 +2,7 @@
 
 Audience: humans and agents working this repo.
 
-This file is the definition of good. Enablement Studio v0 already has typed outputs and an offline engine. Later LLM prompts and evals must satisfy this contract. They are not written here.
+This file is the definition of good. Enablement Studio v0 already has typed outputs and an offline engine. Tablework is the product name; the repo and package stay enablement-studio. Later LLM prompts and evals must satisfy this contract. They are not written here.
 
 Passing the Harborline Account Executive demo is the happy path only. It does not certify Role on other jobs.
 
@@ -19,7 +19,7 @@ Keep these. Do not grow them in this sitting.
 - Three products only: Role → Enablement, Call → Coach, Lesson critic.
 - One entry point: `generate(product, text)` in `src/enablement_studio/engine.py`. Optional `force_offline=True` skips the LLM hook. Do not add a second generate path.
 - One local SQLite store. Each save is a versioned run. `list`, `show`, and `compare` read that store.
-- The dataclasses and JSON shapes in `src/enablement_studio/models.py` are the API. CLI, later UI, offline engine, and LLM all emit the same objects: `RoleEnablement`, `CallCoaching`, `LessonCritique`.
+- The dataclasses and JSON shapes in `src/enablement_studio/models.py` are the API. CLI, UI, offline engine, and LLM all emit the same objects: `RoleEnablement`, `CallCoaching`, `LessonCritique`.
 - The offline path never dies. Demos, CI, and interviews run with no API key. If an LLM call fails or the JSON does not match the schema, fall back to offline.
 - No LAPC, WarU, Autonoma, IDN, SIGNIT, or subscriber/PII content in fixtures or docs. Demo data stays labeled EXAMPLE DATA.
 - Local-first. Domain and hosting are later work. This file does not specify them.
@@ -99,13 +99,23 @@ A scavenger-hunt activity against "explain interchange" fails alignment. Same ve
 
 ## Local UI
 
+Tablework is the product name. The repo and package stay enablement-studio.
+
 `enablement serve` is a loopback page over the same `generate()` entry and SQLite store. Default bind is 127.0.0.1:8765. No auth. No public site. Offline is the product.
+
+GET `/` is the landing: Tablework wordmark, one sentence (paste a job or SOP, walk a module from that source), a Role door, and Call/Critic marked next. It is not the Role form. Wordmark and chrome say Tablework, not Enablement Studio. Quiet caption: this machine · 127.0.0.1. Status: this machine · 127.0.0.1 · offline.
+
+GET `/role` is the Role path. One `generate()` still returns all five Role objects; the UI reveals them one step at a time: Source, Graph, Objectives, Outline, Practice, Quiz. Opening `/role` with no run is Source. After a successful Run, redirect to Graph. Opening `/role?run=N` without a step is Graph. Step state is `?step=source|graph|objectives|outline|practice|quiz` plus `?run=` after generate. Old `/?product=role` (and call/critic query) 302s to `/role` or the landing. Do not leave the old one-page dump as the home.
+
+Source is the paste step — not an empty board. Copy: paste a job or SOP, or Run Harborline. Harborline / EXAMPLE DATA is one click from Source. After Run, source stays a collapsed strip (title + 3 lines + expand) on later steps. Graph shows skill chips, labeled adjacency, and Family/Frame as quiet meta. Invalid Role stops the walk on Graph with "Invalid module" and reasons. Do not parade a successful Outline or Quiz.
 
 Studio Run is offline-first: it calls `generate(..., force_offline=True)` and must return a board without waiting on OpenAI. The optional LLM hook is the same one the CLI uses. It is a separate LLM action, never the thing that holds Run. A single-threaded `HTTPServer` that blocks GETs while urllib talks to a model is not acceptable; other tabs must stay readable while an LLM call is in flight. If `generate()` does call the LLM (CLI or LLM action), the urllib timeout must actually bound that call.
 
-Empty Run stays on the studio. Show the validation in English on the board ("Source is empty. Paste a job or SOP, or Run Harborline."). Do not hang. Do not replace the studio with a raw 400 page. Harborline / EXAMPLE DATA is one click from an empty Role board so the first Run lands on a module. Product nav is the benches at the top — do not also render Role/Call/Critic radios in the form.
+Empty Run stays on Source. Show the validation in English ("Source is empty. Paste a job or SOP, or Run Harborline."). Do not hang. Do not replace the studio with a raw 400 page. Product doors are on the landing and in Role chrome — do not also render Role/Call/Critic radios in the form.
 
-Role is the studio surface: source stays on the table after a run, job family and EnablementFrame are visible, and the skill graph, objectives, 30-minute outline, practice, and application quiz are readable objects. Invalid Role runs say so in plain English and do not look like a successful module. History is this project and product. Two Role runs in the same project can be compared. Call and Critic stay reachable. There is no learner-facing onboarding buddy.
+Call and Critic are next. This sitting does not add `/call` or `/critic` walkthroughs.
+
+History is this project and product. Two Role runs in the same project can be compared. There is no learner-facing onboarding buddy.
 
 ## Out of scope
 
