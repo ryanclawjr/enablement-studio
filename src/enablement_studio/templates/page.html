@@ -449,28 +449,38 @@
     }
     
     /* Graph SVG & nodes */
-    .graph-svg-wrap {
-      width: 100%;
-      overflow-x: auto;
-      padding: 0.5rem 0;
-      margin-bottom: 0.5rem;
+    .skill-chips-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.65rem;
+      border-bottom: 1px solid var(--hairline-subtle);
     }
-    .graph-svg {
-      display: block;
-      margin: 0 auto;
-      max-width: 100%;
-      height: auto;
+    .skill-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: var(--canvas);
+      border: 1px solid var(--hairline);
+      border-radius: 4px;
+      padding: 0.2rem 0.5rem;
+      font-size: 12px;
+    }
+    .skill-chip strong {
+      font-weight: 600;
+      color: var(--ink);
     }
     .graph-list {
       list-style: none;
       padding: 0;
       margin: 0;
     }
-    .graph-list li {
-      padding: 0.45rem 0;
+    .graph-node-row {
+      padding: 0.5rem 0;
       border-bottom: 1px solid var(--hairline-subtle);
     }
-    .graph-list li:last-child {
+    .graph-node-row:last-child {
       border-bottom: none;
     }
     .graph-node-head {
@@ -483,15 +493,23 @@
       color: var(--ink);
     }
     .graph-node-detail {
-      margin: 0.2rem 0 0;
+      margin: 0.2rem 0 0.3rem;
       font-size: 12px;
       color: var(--muted);
     }
-    .graph-node-target {
-      font-size: 11px;
-      color: var(--muted);
+    .graph-adj-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+    }
+    .adj-tag {
       font-family: var(--font-mono);
-      margin-left: auto;
+      font-size: 10px;
+      color: var(--muted);
+      background: var(--canvas);
+      border: 1px solid var(--hairline);
+      border-radius: 3px;
+      padding: 0.1rem 0.35rem;
     }
     
     /* Clean captions / mono: L2 · 6 min (NO green pills) */
@@ -555,37 +573,46 @@
       color: var(--muted);
     }
     
-    /* Practice */
-    .practice-scenario {
+    /* Gong-style Practice Scenario Card */
+    .scenario-card {
       background: var(--canvas);
       border: 1px solid var(--hairline);
       border-radius: 6px;
-      padding: 0.55rem 0.75rem;
-      margin-bottom: 0.65rem;
-      font-size: 12px;
-      line-height: 1.4;
-      color: var(--ink);
+      padding: 0.85rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
     }
-    .practice-steps {
-      padding-left: 1.25rem;
-      margin: 0 0 0.65rem;
+    .scenario-section {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
     }
-    .practice-steps li {
-      margin-bottom: 0.35rem;
-    }
-    .practice-success-title {
-      font-size: 11px;
+    .scenario-label {
+      font-size: 10px;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.06em;
       color: var(--muted);
-      margin: 0.5rem 0 0.25rem;
+    }
+    .scenario-text {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--ink);
+    }
+    .practice-steps, .practice-success {
+      padding-left: 1.15rem;
+      margin: 0;
+      font-size: 12px;
+      color: var(--ink);
+      line-height: 1.4;
+    }
+    .practice-steps li, .practice-success li {
+      margin-bottom: 0.2rem;
     }
     .practice-success {
-      padding-left: 1.25rem;
-      margin: 0;
       color: var(--muted);
-      font-size: 12px;
     }
     
     /* Quiz */

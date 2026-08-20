@@ -420,28 +420,53 @@ def _generate_inline_svg_graph(nodes: list[SkillNode], edges: list[SkillEdge]) -
 
 
 def _render_role_objects(output: RoleEnablement) -> str:
-    # Target map for sequence captions
-    edge_target_map: dict[str, tuple[str, str]] = {}
+    # Build adjacency mapping for requires / supports / sequence
+    # Outgoing relations (supports / before / then) and incoming prerequisites (requires)
+    outgoing_map: dict[str, list[tuple[str, str]]] = {}
+    incoming_map: dict[str, list[tuple[str, str]]] = {}
     for edge in output.skill_graph.edges:
-        edge_target_map[edge.source] = (edge.target, edge.relation)
-        
+        outgoing_map.setdefault(edge.source, []).append((edge.target, edge.relation))
+        incoming_map.setdefault(edge.target, []).append((edge.source, edge.relation))
+
+    # 1. Skill chips summary at top of Graph object
+    skill_chips = "".join(
+        f'<span class="skill-chip">'
+        f'<span class="mono-caption">{"L1" if node.level == "foundation" else ("L2" if node.level == "core" else "L3")}</span> '
+        f'<strong>{_e(node.name)}</strong>'
+        f'</span>'
+        for node in output.skill_graph.nodes
+    )
+
+    # 2. Short labeled adjacency list
     nodes_items = []
     for node in output.skill_graph.nodes:
         level_abbr = "L1" if node.level == "foundation" else ("L2" if node.level == "core" else "L3")
-        target_info = edge_target_map.get(node.id)
-        target_html = f'<span class="graph-node-target">→ {escape(target_info[0])} ({escape(target_info[1])})</span>' if target_info else ''
+        adj_tags = []
+        if node.id in incoming_map:
+            for src, rel in incoming_map[node.id]:
+                if rel == "prerequisite":
+                    adj_tags.append(f'<span class="adj-tag">requires {_e(src)}</span>')
+        if node.id in outgoing_map:
+            for tgt, rel in outgoing_map[node.id]:
+                if rel == "prerequisite":
+                    adj_tags.append(f'<span class="adj-tag">supports {_e(tgt)}</span>')
+                elif rel in {"before", "after", "then"}:
+                    adj_tags.append(f'<span class="adj-tag">{_e(rel)} → {_e(tgt)}</span>')
+                else:
+                    adj_tags.append(f'<span class="adj-tag">{_e(rel)} {_e(tgt)}</span>')
+        
+        adj_html = f'<div class="graph-adj-row">{" ".join(adj_tags)}</div>' if adj_tags else ""
         nodes_items.append(
-            "<li>"
+            '<li class="graph-node-row">'
             '<div class="graph-node-head">'
             f'<span class="mono-caption">{level_abbr}</span> '
             f'<span class="graph-node-name">{_e(node.name)}</span>'
-            f"{target_html}"
             "</div>"
             f'<p class="graph-node-detail">{_e(node.detail)}</p>'
+            f"{adj_html}"
             "</li>"
         )
     nodes_html = "".join(nodes_items) if nodes_items else "<li>No skill nodes.</li>"
-    svg_graph = _generate_inline_svg_graph(output.skill_graph.nodes, output.skill_graph.edges)
 
     objectives = "".join(
         "<li>"
@@ -491,7 +516,7 @@ def _render_role_objects(output: RoleEnablement) -> str:
     return (
         '<section class="skill-graph object">'
         '<h3>Graph <span class="object-tag">Skills</span></h3>'
-        f"{svg_graph}"
+        f'<div class="skill-chips-row">{skill_chips}</div>'
         f'<ol class="graph-list">{nodes_html}</ol>'
         "</section>"
         '<section class="objectives object">'
@@ -504,10 +529,11 @@ def _render_role_objects(output: RoleEnablement) -> str:
         "</section>"
         f'<section class="practice object">'
         f'<h3>Practice <span class="object-tag">{_e(output.practice.title)}</span></h3>'
-        f'<div class="practice-scenario"><strong>Scenario:</strong> {_e(output.practice.scenario)}</div>'
-        f'<ol class="practice-steps">{steps}</ol>'
-        '<div class="practice-success-title">Success criteria:</div>'
-        f'<ul class="practice-success">{success}</ul>'
+        '<div class="scenario-card">'
+        f'<div class="scenario-section"><span class="scenario-label">Situation</span><p class="scenario-text">{_e(output.practice.scenario)}</p></div>'
+        f'<div class="scenario-section"><span class="scenario-label">Steps</span><ol class="practice-steps">{steps}</ol></div>'
+        f'<div class="scenario-section"><span class="scenario-label">Success</span><ul class="practice-success">{success}</ul></div>'
+        '</div>'
         "</section>"
         '<section class="quiz object">'
         '<h3>Quiz <span class="object-tag">Application</span></h3>'
