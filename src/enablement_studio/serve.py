@@ -62,7 +62,10 @@ class EnablementHandler(BaseHTTPRequestHandler):
         error: str | None = None
         output = None
         run: SavedRun | None = None
+        compare_run: SavedRun | None = None
+        compare_output = None
         run_raw = _first(query, "run")
+        compare_raw = _first(query, "compare")
         if run_raw:
             try:
                 run = store.get_run(int(run_raw))
@@ -78,14 +81,23 @@ class EnablementHandler(BaseHTTPRequestHandler):
                 text = demo_text(product.value)
             except (FileNotFoundError, ValueError) as exc:
                 error = str(exc)
+        if compare_raw:
+            try:
+                compare_run = store.get_run(int(compare_raw))
+                compare_output = output_from_run(compare_run)
+            except (KeyError, ValueError, OverflowError, sqlite3.Error):
+                self._send(404, _error_page(f"run {compare_raw} not found"))
+                return
         body = render_page(
             product=product,
             project=project,
             text=text,
-            runs=store.list_runs(),
+            runs=store.list_runs(project=project, product=product),
             error=error,
             output=output,
             run=run,
+            compare_output=compare_output,
+            compare_run=compare_run,
         )
         self._send(200, body)
 
@@ -200,7 +212,7 @@ def _form_error(message: str, fields: dict[str, str] | None = None) -> str:
         product=product,
         project=project,
         text=data.get("text", ""),
-        runs=store.list_runs(),
+        runs=store.list_runs(project=project, product=product),
         error=message,
     )
 

@@ -101,6 +101,8 @@ A scavenger-hunt activity against "explain interchange" fails alignment. Same ve
 
 `enablement serve` is a loopback page over the same `generate()` entry and SQLite store. Default bind is 127.0.0.1:8765. No auth. No public site. Offline is the product; the optional LLM hook is the same one the CLI uses.
 
+Role is the studio surface: source stays on the table after a run, job family and EnablementFrame are visible, and the skill graph, objectives, 30-minute outline, practice, and application quiz are readable objects. Invalid Role runs say so in plain English and do not look like a successful module. History is this project and product. Two Role runs in the same project can be compared. Call and Critic stay reachable. There is no learner-facing onboarding buddy.
+
 ## Out of scope
 
 - No domain, hosting, or Autonoma merge.

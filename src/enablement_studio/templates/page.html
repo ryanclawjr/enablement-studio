@@ -3,48 +3,97 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Enablement Studio</title>
+  <title>Role studio — Enablement Studio</title>
   <style>
     :root {
       color-scheme: light;
       --ink: #1b1916;
       --muted: #5c564d;
-      --paper: #f4f0e7;
+      --paper: #efe8d8;
       --card: #fffdf8;
       --line: #d7d0c3;
       --accent: #1b1916;
       --warn: #efe3b0;
       --bad: #f3d4ce;
+      --ok: #e4eee4;
+      --failed: #f6e4e0;
     }
     * { box-sizing: border-box; }
     body {
-      margin: 0 auto;
-      max-width: 42rem;
-      padding: 1.25rem 1rem 3rem;
+      margin: 0;
+      min-height: 100vh;
       font: 16px/1.45 ui-sans-serif, system-ui, sans-serif;
       color: var(--ink);
-      background: var(--paper);
+      background:
+        radial-gradient(circle at 12% 0%, #f7f1e4 0, transparent 42%),
+        var(--paper);
+    }
+    .wrap {
+      max-width: 78rem;
+      margin: 0 auto;
+      padding: 1.35rem 1.15rem 3.5rem;
     }
     h1, h2, h3 { line-height: 1.2; }
-    h1 { font-size: 1.45rem; margin: 0 0 0.35rem; }
-    h2 { font-size: 1.1rem; margin: 1.5rem 0 0.6rem; }
+    h1 { font-size: 2rem; margin: 0 0 0.4rem; letter-spacing: -0.03em; }
+    h2 { font-size: 1.15rem; margin: 0 0 0.65rem; }
     h3 { font-size: 1rem; margin: 1.1rem 0 0.4rem; }
-    header p, .hint { color: var(--muted); }
-    form, .result, .runs {
+    .eyebrow, .hint, .lede, .meta { color: var(--muted); }
+    .eyebrow {
+      margin: 0 0 0.35rem;
+      font-size: 0.78rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .lede { max-width: 42rem; margin: 0 0 1rem; }
+    .benches {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin: 0 0 1.25rem;
+    }
+    .bench {
+      display: inline-block;
+      padding: 0.35rem 0.7rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      text-decoration: none;
+      background: #fff;
+      font-size: 0.92rem;
+    }
+    .bench.current {
+      background: var(--ink);
+      border-color: var(--ink);
+      color: #fff;
+      font-weight: 600;
+    }
+    .table {
+      display: grid;
+      grid-template-columns: minmax(18rem, 22rem) minmax(0, 1fr);
+      gap: 1rem;
+      align-items: start;
+    }
+    @media (max-width: 860px) {
+      .table { grid-template-columns: 1fr; }
+    }
+    .source-panel, .board, .history, .result, .compare, form {
       background: var(--card);
       border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 1rem;
+      border-radius: 10px;
     }
+    .source-panel, .board, .history, .compare, .empty-board {
+      padding: 1rem 1.05rem 1.15rem;
+    }
+    .source-panel { position: sticky; top: 0.75rem; }
     fieldset {
       border: 1px solid var(--line);
       border-radius: 6px;
       margin: 0 0 0.85rem;
-      padding: 0.6rem 0.75rem;
+      padding: 0.55rem 0.7rem;
     }
-    .products { display: flex; flex-wrap: wrap; gap: 0.65rem 1rem; }
+    .products { display: flex; flex-wrap: wrap; gap: 0.55rem 0.9rem; }
     label.stack { display: block; margin: 0 0 0.85rem; }
-    input[type="text"], textarea {
+    input[type="text"], textarea, select {
       display: block;
       width: 100%;
       margin-top: 0.35rem;
@@ -54,9 +103,9 @@
       border-radius: 6px;
       background: #fff;
     }
-    textarea { min-height: 14rem; resize: vertical; }
+    textarea { min-height: 18rem; resize: vertical; }
     .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
-    button.run {
+    button.run, .compare-form button {
       appearance: none;
       border: 0;
       border-radius: 6px;
@@ -68,56 +117,145 @@
     }
     .demos { margin: 0.85rem 0 0; }
     .demos a { margin-right: 0.75rem; }
-    .error, .banner, .invalid {
+    .error, .banner, .invalid, .empty-board {
       border-radius: 6px;
       padding: 0.55rem 0.7rem;
       margin: 0 0 0.85rem;
     }
     .error, .invalid { background: var(--bad); }
     .banner { background: var(--warn); }
-    .meta { color: var(--muted); font-size: 0.92rem; }
-    .result ul { padding-left: 1.15rem; }
-    .runs { list-style: none; margin: 0; }
+    .empty-board { background: #f7f3ea; color: var(--muted); }
+    .result { padding: 1rem 1.05rem 1.2rem; border: 0; }
+    .studio-ok { background: transparent; }
+    .studio-failed, .failed {
+      background: var(--failed);
+      border: 1px solid #e4b8b0;
+      border-radius: 10px;
+    }
+    .studio-failed h2 { color: #6a2b22; }
+    .failed-artifacts { opacity: 0.88; }
+    .meta { font-size: 0.92rem; }
+    .diagnosis {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+      margin: 0 0 1rem;
+    }
+    .diagnosis div {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0.45rem 0.65rem;
+    }
+    .diagnosis dt {
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .diagnosis dd { margin: 0.15rem 0 0; font-weight: 600; }
+    .object {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0.7rem 0.85rem 0.9rem;
+      margin: 0 0 0.75rem;
+    }
+    .object h3 { margin-top: 0; }
+    .nodes, .timeline, .result ol, .result ul { padding-left: 1.2rem; }
+    .level, .minutes {
+      display: inline-block;
+      font-size: 0.75rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      background: var(--ok);
+      border-radius: 999px;
+      padding: 0.1rem 0.45rem;
+      margin-right: 0.3rem;
+    }
+    .quiz .answer { font-weight: 600; }
+    .history { margin-top: 1rem; }
+    .runs { list-style: none; margin: 0; padding: 0; }
     .runs li { margin: 0 0 0.45rem; }
     .runs a { color: inherit; }
+    .compare { margin: 1rem 0 0; }
+    .compare-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.85rem;
+    }
+    @media (max-width: 860px) {
+      .compare-grid { grid-template-columns: 1fr; }
+    }
+    .compare-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem;
+      align-items: end;
+      margin-top: 0.85rem;
+      padding: 0.75rem;
+    }
+    .compare-form label { margin: 0; }
+    .compare-link { margin-left: 0.45rem; font-size: 0.9rem; }
+    pre {
+      white-space: pre-wrap;
+      font-size: 0.9rem;
+    }
   </style>
 </head>
-<body>
-  <header>
-    <h1>Enablement Studio</h1>
-    <p>Local UI on this machine. Same <code>generate()</code> path and SQLite store as the CLI. No login. No API key required.</p>
-  </header>
+<body class="{{body_class}}">
+  <div class="wrap">
+    <header>
+      <p class="eyebrow">Enablement Studio · this machine</p>
+      <h1>Role studio</h1>
+      <p class="lede">Sit a job, SOP, or policy on the table. Role already is the course-design assistant: a skill graph, objectives, a 30-minute outline, practice, and an application quiz grounded in that source. Call and Critic stay on the other benches. No login. No API key required.</p>
+      <nav class="benches" aria-label="Products">
+        <a class="{{role_bench}}" href="/?product=role&amp;project={{bench_project}}">Role → Enablement</a>
+        <a class="{{call_bench}}" href="/?product=call&amp;project={{bench_project}}">Call → Coach</a>
+        <a class="{{critic_bench}}" href="/?product=critic&amp;project={{bench_project}}">Lesson critic</a>
+      </nav>
+    </header>
 
-  <h2>Run a product</h2>
-  <form method="post" action="/">
-    <fieldset>
-      <legend>Product</legend>
-      <div class="products">
-        <label><input type="radio" name="product" value="role" {{role_checked}}> Role → Enablement</label>
-        <label><input type="radio" name="product" value="call" {{call_checked}}> Call → Coach</label>
-        <label><input type="radio" name="product" value="critic" {{critic_checked}}> Lesson critic</label>
-      </div>
-    </fieldset>
-    <label class="stack">Project
-      <input type="text" name="project" value="{{project}}" autocomplete="off">
-    </label>
-    <label class="stack">Job, SOP, transcript, or outline
-      <textarea name="text" spellcheck="false">{{text}}</textarea>
-    </label>
-    <div class="actions">
-      <button class="run" type="submit">Run</button>
+    <div class="table">
+      <section class="source-panel">
+        <h2>{{source_heading}}</h2>
+        <form method="post" action="/">
+          <fieldset>
+            <legend>Product</legend>
+            <div class="products">
+              <label><input type="radio" name="product" value="role" {{role_checked}}> Role → Enablement</label>
+              <label><input type="radio" name="product" value="call" {{call_checked}}> Call → Coach</label>
+              <label><input type="radio" name="product" value="critic" {{critic_checked}}> Lesson critic</label>
+            </div>
+          </fieldset>
+          <label class="stack">Project
+            <input type="text" name="project" value="{{project}}" autocomplete="off">
+          </label>
+          <label class="stack">{{source_label}}
+            <textarea name="text" spellcheck="false">{{text}}</textarea>
+          </label>
+          <div class="actions">
+            <button class="run" type="submit">Run</button>
+          </div>
+          <p class="demos hint">Load demo (EXAMPLE DATA fixtures, not a live employer):
+            <a href="/?product=role&amp;demo=1&amp;project={{bench_project}}">Role</a>
+            <a href="/?product=call&amp;demo=1&amp;project={{bench_project}}">Call</a>
+            <a href="/?product=critic&amp;demo=1&amp;project={{bench_project}}">Critic</a>
+          </p>
+        </form>
+      </section>
+
+      <section class="board">
+        {{error_block}}
+        {{result_block}}
+        {{compare_block}}
+      </section>
     </div>
-    <p class="demos hint">Load demo (EXAMPLE DATA fixtures, not a live employer):
-      <a href="/?product=role&amp;demo=1">Role</a>
-      <a href="/?product=call&amp;demo=1">Call</a>
-      <a href="/?product=critic&amp;demo=1">Critic</a>
-    </p>
-  </form>
 
-  {{error_block}}
-  {{result_block}}
-
-  <h2>Recent runs</h2>
-  {{runs_block}}
+    <section class="history">
+      <h2>{{runs_heading}}</h2>
+      {{runs_block}}
+    </section>
+  </div>
 </body>
 </html>
