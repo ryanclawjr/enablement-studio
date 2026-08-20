@@ -4,6 +4,7 @@ import sqlite3
 import sys
 from html import escape
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
@@ -21,6 +22,11 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 DEFAULT_PROJECT = "default"
 MAX_BODY_BYTES = 1_000_000
+STATIC_ROOT = Path(__file__).resolve().parent / "static"
+STATIC_TYPES = {
+    ".woff2": "font/woff2",
+    ".txt": "text/plain; charset=utf-8",
+}
 BIND_EXPOSURE_WARNING = (
     "warning: --host 0.0.0.0 exposes stored job postings and transcripts "
     "on the LAN with no authentication. Default bind is 127.0.0.1."
@@ -65,6 +71,9 @@ class EnablementHandler(BaseHTTPRequestHandler):
         query = parse_qs(parsed.query, keep_blank_values=True)
         if path in {"/", "/role"}:
             self._get_studio(query)
+            return
+        if path.startswith("/static/"):
+            self._send_static(path)
             return
         if path == "/call":
             self._redirect("/?next=call", status=302)
@@ -207,6 +216,20 @@ class EnablementHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
+    def _send_static(self, path: str) -> None:
+        target = _safe_static_file(path[len("/static/") :])
+        if target is None:
+            self._send(404, _error_page("Not found."))
+            return
+        payload = target.read_bytes()
+        content_type = STATIC_TYPES.get(target.suffix.lower(), "application/octet-stream")
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Cache-Control", "public, max-age=31536000")
+        self.end_headers()
+        self.wfile.write(payload)
+
     def _redirect(self, location: str, status: int = 302) -> None:
         self.send_response(status)
         self.send_header("Location", location)
@@ -218,6 +241,25 @@ def _normalize_path(path: str) -> str:
     if path != "/" and path.endswith("/"):
         return path.rstrip("/") or "/"
     return path or "/"
+
+
+def _safe_static_file(rel: str) -> Path | None:
+    if not rel or rel.startswith("/") or "\\" in rel or "\x00" in rel:
+        return None
+    parts = Path(rel).parts
+    if not parts or any(part in {"", ".."} for part in parts):
+        return None
+    root = STATIC_ROOT.resolve()
+    candidate = (root / Path(*parts)).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        return None
+    if not candidate.is_file():
+        return None
+    if candidate.suffix.lower() not in STATIC_TYPES:
+        return None
+    return candidate
 
 
 def _csrf_ok(handler: EnablementHandler) -> bool:
