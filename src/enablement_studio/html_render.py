@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from html import escape
 from pathlib import Path
+from urllib.parse import urlencode
 
 from enablement_studio.engine import llm_configured
 from enablement_studio.models import (
@@ -14,7 +15,7 @@ from enablement_studio.models import (
     SkillEdge,
     SkillNode,
 )
-from enablement_studio.render import product_label, render_compare, source_banner
+from enablement_studio.render import render_compare, source_banner
 from enablement_studio.role.family import (
     EnablementFrame,
     JobFamily,
@@ -24,8 +25,20 @@ from enablement_studio.role.family import (
 from enablement_studio.role.title_swap import role_invalid_reasons
 from enablement_studio.textutil import extract_title
 
-TEMPLATE_PATH = Path(__file__).resolve().parent / "templates" / "page.html"
+TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
+TEMPLATE_PATH = TEMPLATE_DIR / "page.html"
+LANDING_PATH = TEMPLATE_DIR / "landing.html"
 RECENT_LIMIT = 20
+
+ROLE_STEPS = ("source", "graph", "objectives", "outline", "practice", "quiz")
+STEP_LABELS = {
+    "source": "Source",
+    "graph": "Graph",
+    "objectives": "Objectives",
+    "outline": "Outline",
+    "practice": "Practice",
+    "quiz": "Quiz",
+}
 
 _FRAME_VOICE = {
     EnablementFrame.DESIGNER: "the learner designs instruction",
@@ -36,6 +49,55 @@ _FRAME_VOICE = {
 
 def _e(text: object) -> str:
     return escape(str(text), quote=True)
+
+
+def role_path(
+    run_id: int | str | None = None,
+    step: str | None = None,
+    *,
+    compare: int | str | None = None,
+    project: str | None = None,
+    demo: bool = False,
+) -> str:
+    params: dict[str, str] = {}
+    if run_id is not None:
+        params["run"] = str(run_id)
+    if step:
+        params["step"] = step
+    if compare is not None:
+        params["compare"] = str(compare)
+    if project:
+        params["project"] = project
+    if demo:
+        params["demo"] = "1"
+    if not params:
+        return "/role"
+    return "/role?" + urlencode(params)
+
+
+def resolve_role_step(
+    step: str | None,
+    *,
+    run: SavedRun | None,
+    output: ProductOutput | None,
+) -> str:
+    has_module = isinstance(output, RoleEnablement)
+    if not has_module:
+        return "source"
+    requested = (step or "").strip().lower()
+    if requested not in ROLE_STEPS:
+        requested = "graph"
+    if output.invalid and requested not in {"source", "graph"}:
+        return "graph"
+    return requested
+
+
+def render_landing(*, notice: str | None = None) -> str:
+    template = LANDING_PATH.read_text(encoding="utf-8")
+    notice_html = ""
+    if notice:
+        notice_html = f'<p class="notice" role="status">{_e(notice)}</p>'
+    return _fill(template, {"{{notice_block}}": notice_html})
 
 
 def render_page(
@@ -49,94 +111,193 @@ def render_page(
     run: SavedRun | None = None,
     compare_output: ProductOutput | None = None,
     compare_run: SavedRun | None = None,
+    step: str | None = None,
 ) -> str:
     template = TEMPLATE_PATH.read_text(encoding="utf-8")
-    source_heading, source_label = _source_copy(product)
-    page_title = _page_title(product)
+    resolved = resolve_role_step(step, run=run, output=output)
     has_key = llm_configured()
-    llm_disabled = "" if has_key else " disabled"
-    llm_caption = "" if has_key else ' <span class="no-key-caption">(no key)</span>'
-
+    comparing = compare_run is not None and compare_output is not None and run is not None
     return _fill(
         template,
         {
-            "{{page_title}}": _e(page_title),
-            "{{product_h1}}": _e(page_title),
-            "{{body_class}}": _body_class(product),
-            "{{product_value}}": _e(product.value),
-            "{{role_bench}}": _bench_class(product, Product.ROLE),
-            "{{call_bench}}": _bench_class(product, Product.CALL),
-            "{{critic_bench}}": _bench_class(product, Product.CRITIC),
-            "{{bench_project}}": _e(project),
-            "{{source_heading}}": _e(source_heading),
-            "{{source_label}}": _e(source_label),
-            "{{source_input_block}}": _source_input_block(text, has_output=output is not None),
-            "{{llm_disabled_attr}}": llm_disabled,
-            "{{llm_caption}}": llm_caption,
+            "{{page_title}}": _e(_page_title(resolved)),
+            "{{body_class}}": _e(f"product-role step-{resolved}"),
             "{{project}}": _e(project),
-            "{{error_block}}": _error_block(error),
-            "{{result_block}}": (
+            "{{path_chrome}}": _path_chrome(resolved, run, output),
+            "{{source_strip}}": (
                 ""
-                if compare_run is not None and compare_output is not None and run is not None
-                else _result_block(product, output, run, text, project)
+                if resolved == "source"
+                else _source_strip(text, project, output, has_key)
+            ),
+            "{{error_block}}": _error_block(error),
+            "{{step_board}}": (
+                ""
+                if comparing
+                else _step_board(resolved, text, project, output, run, has_key)
             ),
             "{{compare_block}}": _compare_block(
                 run, output, compare_run, compare_output
             ),
+            "{{step_nav}}": "" if comparing else _step_nav(resolved, run, output),
             "{{runs_heading}}": _runs_heading(product, project),
             "{{runs_block}}": _runs_block(runs, run, product, project),
         },
     )
 
 
-def _page_title(product: Product) -> str:
-    if product is Product.ROLE:
+def _page_title(step: str) -> str:
+    if step == "source":
         return "Role"
-    if product is Product.CALL:
-        return "Call"
-    if product is Product.CRITIC:
-        return "Critic"
-    never: Product = product
-    raise ValueError(f"unsupported product: {never}")
+    return f"Role · {STEP_LABELS[step]}"
 
 
-def _body_class(product: Product) -> str:
-    return f"product-{product.value}"
+def _path_chrome(
+    step: str, run: SavedRun | None, output: ProductOutput | None
+) -> str:
+    current_idx = ROLE_STEPS.index(step)
+    items: list[str] = []
+    for index, name in enumerate(ROLE_STEPS):
+        label = STEP_LABELS[name]
+        if index == current_idx:
+            items.append(
+                f'<span class="path-step current" aria-current="step">{_e(label)}</span>'
+            )
+            continue
+        if index < current_idx and run is not None:
+            href = _e(role_path(run.id, name))
+            items.append(f'<a class="path-step past" href="{href}">{_e(label)}</a>')
+            continue
+        items.append(f'<span class="path-step future">{_e(label)}</span>')
+    return f'<nav class="role-path" aria-label="Role path">{"".join(items)}</nav>'
 
 
-def _bench_class(current: Product, product: Product) -> str:
-    return "bench current" if current is product else "bench"
-
-
-def _source_copy(product: Product) -> tuple[str, str]:
-    if product is Product.ROLE:
-        return "Source", "Job, SOP, or policy"
-    if product is Product.CALL:
-        return "Source", "Sales or training transcript"
-    if product is Product.CRITIC:
-        return "Source", "Lesson outline or storyboard"
-    never: Product = product
-    raise ValueError(f"unsupported product: {never}")
-
-
-def _source_input_block(text: str, has_output: bool) -> str:
-    escaped_text = _e(text)
-    if not has_output or not text.strip():
-        return f'<textarea name="text" spellcheck="false" placeholder="Paste source text...">{escaped_text}</textarea>'
-    
-    # After a run: show collapsed source preview + expand
-    lines = [line.strip() for line in text.strip().splitlines() if line.strip()]
-    preview_lines = lines[:4]
-    preview_text = "\n".join(preview_lines)
+def _source_form(text: str, project: str, has_key: bool) -> str:
+    llm_disabled = "" if has_key else " disabled"
+    llm_caption = "" if has_key else ' <span class="no-key-caption">(no key)</span>'
     return (
-        '<div class="source-preview-box">'
-        f'{_e(preview_text)}'
-        '</div>'
-        '<details class="source-details">'
-        '<summary>Edit source text</summary>'
-        f'<textarea name="text" spellcheck="false">{escaped_text}</textarea>'
-        '</details>'
+        '<form method="post" action="/role" class="role-form">'
+        '<input type="hidden" name="product" value="role">'
+        '<p class="source-copy">Paste a job or SOP, or Run Harborline.</p>'
+        '<label class="stack">Project'
+        f'<input type="text" name="project" value="{_e(project)}" autocomplete="off">'
+        "</label>"
+        '<label class="stack">Job, SOP, or policy'
+        f'<textarea name="text" spellcheck="false" placeholder="Paste a job or SOP...">{_e(text)}</textarea>'
+        "</label>"
+        '<div class="actions">'
+        '<button class="run" type="submit" name="action" value="run">Run</button>'
+        f'<button class="llm" type="submit" name="action" value="llm"{llm_disabled}>LLM{llm_caption}</button>'
+        '<button class="llm" type="submit" name="action" value="demo">Run Harborline</button>'
+        '<span class="hint">EXAMPLE DATA</span>'
+        "</div>"
+        '<p class="hint">Run uses the deterministic offline engine. LLM is optional.</p>'
+        "</form>"
     )
+
+
+def _source_strip(
+    text: str, project: str, output: ProductOutput | None, has_key: bool
+) -> str:
+    if not text.strip():
+        return ""
+    lines = [line.strip() for line in text.strip().splitlines() if line.strip()]
+    preview = "\n".join(lines[:3])
+    title = output.role_title if isinstance(output, RoleEnablement) else "Source"
+    llm_disabled = "" if has_key else " disabled"
+    llm_caption = "" if has_key else ' <span class="no-key-caption">(no key)</span>'
+    return (
+        '<details class="source-strip">'
+        "<summary>"
+        f'<span class="source-strip-title">{_e(title)}</span>'
+        f'<pre class="source-strip-preview">{_e(preview)}</pre>'
+        "</summary>"
+        '<form method="post" action="/role" class="role-form">'
+        '<input type="hidden" name="product" value="role">'
+        f'<input type="hidden" name="project" value="{_e(project)}">'
+        f'<textarea name="text" spellcheck="false">{_e(text)}</textarea>'
+        '<div class="actions">'
+        '<button class="run" type="submit" name="action" value="run">Run</button>'
+        f'<button class="llm" type="submit" name="action" value="llm"{llm_disabled}>LLM{llm_caption}</button>'
+        "</div>"
+        "</form>"
+        "</details>"
+    )
+
+
+def _step_board(
+    step: str,
+    text: str,
+    project: str,
+    output: ProductOutput | None,
+    run: SavedRun | None,
+    has_key: bool,
+) -> str:
+    if step == "source":
+        return (
+            f'<div class="step-view" data-step="source">'
+            "<h2>Source</h2>"
+            f"{_source_form(text, project, has_key)}"
+            "</div>"
+        )
+    if not isinstance(output, RoleEnablement):
+        return (
+            f'<div class="step-view" data-step="source">'
+            "<h2>Source</h2>"
+            f"{_source_form(text, project, has_key)}"
+            "</div>"
+        )
+    inner = _role_step_inner(step, output, run, text)
+    return f'<div class="step-view" data-step="{_e(step)}">{inner}</div>'
+
+
+def _role_step_inner(
+    step: str, output: RoleEnablement, run: SavedRun | None, source: str
+) -> str:
+    if output.invalid:
+        return _render_invalid_graph(output, run, source)
+    header = _role_meta_header(output, run, source, heading=output.role_title)
+    body = _role_step_object(step, output)
+    return header + body
+
+
+def _role_step_object(step: str, output: RoleEnablement) -> str:
+    if step == "graph":
+        return _render_role_graph(output)
+    if step == "objectives":
+        return _render_role_objectives(output)
+    if step == "outline":
+        return _render_role_outline(output)
+    if step == "practice":
+        return _render_role_practice(output)
+    if step == "quiz":
+        return _render_role_quiz(output)
+    if step == "source":
+        return ""
+    never: str = step
+    raise ValueError(f"unsupported Role step: {never}")
+
+
+def _step_nav(step: str, run: SavedRun | None, output: ProductOutput | None) -> str:
+    current_idx = ROLE_STEPS.index(step)
+    parts: list[str] = []
+    if step == "source":
+        parts.append('<a class="btn-action back" href="/">Back</a>')
+    elif run is not None and current_idx > 0:
+        prev = ROLE_STEPS[current_idx - 1]
+        parts.append(
+            f'<a class="btn-action back" href="{_e(role_path(run.id, prev))}">Back</a>'
+        )
+    invalid = isinstance(output, RoleEnablement) and output.invalid
+    if run is not None and not invalid and current_idx + 1 < len(ROLE_STEPS):
+        nxt = ROLE_STEPS[current_idx + 1]
+        parts.append(
+            f'<a class="btn-action continue" href="{_e(role_path(run.id, nxt))}">Continue</a>'
+        )
+    elif step == "quiz":
+        parts.append('<a class="btn-action versions-link" href="#versions">Versions</a>')
+    if not parts:
+        return ""
+    return f'<nav class="step-nav">{"".join(parts)}</nav>'
 
 
 def _fill(template: str, mapping: dict[str, str]) -> str:
@@ -164,77 +325,6 @@ def _error_block(error: str | None) -> str:
     return f'<p class="error" role="alert">{_e(error)}</p>'
 
 
-def _result_block(
-    product: Product,
-    output: ProductOutput | None,
-    run: SavedRun | None,
-    source: str,
-    project: str,
-) -> str:
-    if output is None:
-        return _empty_board(product, project)
-    match output:
-        case RoleEnablement():
-            return _render_role_studio(output, run, source)
-        case CallCoaching():
-            return _render_call_studio(output, run)
-        case LessonCritique():
-            return _render_critic_studio(output, run)
-        case _:
-            never: ProductOutput = output
-            raise TypeError(f"unsupported output: {type(never)!r}")
-
-
-def _empty_board(product: Product, project: str) -> str:
-    if product is Product.ROLE:
-        empty = "Board is empty. Paste a job or SOP, or Run Harborline."
-        label = "Run Harborline · EXAMPLE DATA"
-        frames = (
-            '<div class="empty-frames">'
-            '<div class="empty-frame-box">Graph</div>'
-            '<div class="empty-frame-box">Objectives</div>'
-            '<div class="empty-frame-box">Outline</div>'
-            '<div class="empty-frame-box">Practice</div>'
-            '<div class="empty-frame-box">Quiz</div>'
-            '</div>'
-        )
-    elif product is Product.CALL:
-        empty = "Board is empty. Paste a transcript, or Run Harborline."
-        label = "Run Harborline · EXAMPLE DATA"
-        frames = (
-            '<div class="empty-frames">'
-            '<div class="empty-frame-box">Signals</div>'
-            '<div class="empty-frame-box">Notes</div>'
-            '<div class="empty-frame-box">Fix</div>'
-            '</div>'
-        )
-    elif product is Product.CRITIC:
-        empty = "Board is empty. Paste an outline or storyboard, or Run Harborline."
-        label = "Run Harborline · EXAMPLE DATA"
-        frames = (
-            '<div class="empty-frames">'
-            '<div class="empty-frame-box">Scores</div>'
-            '<div class="empty-frame-box">Findings</div>'
-            '<div class="empty-frame-box">Rewrite</div>'
-            '</div>'
-        )
-    else:
-        never: Product = product
-        raise ValueError(f"unsupported product: {never}")
-    return (
-        '<div class="empty-board">'
-        f"<p>{_e(empty)}</p>"
-        f'<form method="post" action="/" class="demo-run">'
-        f'<input type="hidden" name="product" value="{_e(product.value)}">'
-        f'<input type="hidden" name="project" value="{_e(project)}">'
-        f'<input type="hidden" name="action" value="demo">'
-        f'<button class="run" type="submit">{_e(label)}</button>'
-        "</form>"
-        f"{frames}"
-        "</div>"
-    )
-
-
 def _role_source(run: SavedRun | None, fallback: str, output: RoleEnablement) -> str:
     if run is not None and run.input_text.strip():
         return run.input_text
@@ -250,63 +340,76 @@ def _role_diagnosis(output: RoleEnablement, source: str) -> tuple[JobFamily, Ena
     return family, frame
 
 
-def _render_role_studio(
-    output: RoleEnablement, run: SavedRun | None, source: str
+def _role_meta_header(
+    output: RoleEnablement,
+    run: SavedRun | None,
+    source: str,
+    *,
+    heading: str,
 ) -> str:
     source_text = _role_source(run, source, output)
     family, frame = _role_diagnosis(output, source_text)
-    objects = _render_role_objects(output)
     banner_text = source_banner(output)
-    
-    # Combined single meta row: title + Family/Frame as one meta row + vN · offline
     version_str = f"v{run.version}" if run is not None else "v1"
     engine_str = run.engine.value if run is not None else "offline"
     run_id_str = f"run {run.id} · " if run is not None else ""
-    project_str = f"project {_e(run.project)} · " if run is not None else ""
-    
+    project_str = f"project {run.project} · " if run is not None else ""
     meta_chips = [
-        f'<span class="meta-chip"><span class="meta-chip-label">Family</span> <strong data-family="{_e(family.value)}">{_e(family.value)}</strong></span>'
+        f'<span class="meta-chip"><span class="meta-chip-label">Family</span> '
+        f'<strong data-family="{_e(family.value)}">{_e(family.value)}</strong></span>'
     ]
     if family is JobFamily.ENABLEMENT and frame is not None:
         voice = _FRAME_VOICE[frame]
         meta_chips.append(
-            f'<span class="meta-chip"><span class="meta-chip-label">Frame</span> <strong data-frame="{_e(frame.value)}">{_e(frame.value)}</strong> — {_e(voice)}</span>'
+            f'<span class="meta-chip"><span class="meta-chip-label">Frame</span> '
+            f'<strong data-frame="{_e(frame.value)}">{_e(frame.value)}</strong> — {_e(voice)}</span>'
         )
-    meta_chips.append(f'<span class="meta-chip">{_e(run_id_str)}{_e(project_str)}{_e(version_str)} · engine {_e(engine_str)}</span>')
-    
-    meta_html = f'<div class="meta-row">{" ".join(meta_chips)}</div>'
-    banner_html = f'<p class="source-note-banner">{_e(banner_text)}</p>'
+    meta_chips.append(
+        f'<span class="meta-chip">{_e(run_id_str)}{_e(project_str)}'
+        f"{_e(version_str)} · engine {_e(engine_str)}</span>"
+    )
+    return (
+        '<header class="module-header">'
+        f"<h2>{_e(heading)}</h2>"
+        f'<div class="meta-row">{" ".join(meta_chips)}</div>'
+        f'<p class="source-note-banner">{_e(banner_text)}</p>'
+        "</header>"
+    )
 
+
+def _render_invalid_graph(
+    output: RoleEnablement, run: SavedRun | None, source: str
+) -> str:
+    source_text = _role_source(run, source, output)
+    reasons = "".join(
+        f"<li>{_e(reason)}</li>" for reason in role_invalid_reasons(output, source_text)
+    )
+    header = _role_meta_header(output, run, source, heading="Invalid module")
+    return (
+        '<article class="result studio-failed">'
+        f"{header}"
+        f"<h3>{_e(output.role_title)}</h3>"
+        '<div class="invalid-banner">'
+        "<strong>Not accepted</strong> — stored as a failed Role run so list, show, and eval can see the miss. "
+        "It is not a successful module."
+        f'<ul class="invalid-reasons">{reasons}</ul>'
+        "</div>"
+        '<p class="hint">What the engine produced (not accepted)</p>'
+        f'<div class="failed-artifacts">{_render_role_graph(output)}</div>'
+        "</article>"
+    )
+
+
+def _render_role_studio(
+    output: RoleEnablement, run: SavedRun | None, source: str
+) -> str:
     if output.invalid:
-        reasons = "".join(
-            f"<li>{_e(reason)}</li>"
-            for reason in role_invalid_reasons(output, source_text)
-        )
-        return (
-            '<article class="result studio-failed">'
-            '<header class="module-header">'
-            "<h2>Invalid module</h2>"
-            f"<h3>{_e(output.role_title)}</h3>"
-            f"{meta_html}"
-            f"{banner_html}"
-            "</header>"
-            '<div class="invalid-banner">'
-            "<strong>Not accepted</strong> — stored as a failed Role run so list, show, and eval can see the miss. "
-            "It is not a successful module."
-            f'<ul class="invalid-reasons">{reasons}</ul>'
-            "</div>"
-            "<h3>What the engine produced (not accepted)</h3>"
-            f'<div class="failed-artifacts">{objects}</div>'
-            "</article>"
-        )
+        return _render_invalid_graph(output, run, source)
+    header = _role_meta_header(output, run, source, heading=output.role_title)
     return (
         '<article class="result studio-ok">'
-        '<header class="module-header">'
-        f"<h2>{_e(output.role_title)}</h2>"
-        f"{meta_html}"
-        f"{banner_html}"
-        "</header>"
-        f"{objects}"
+        f"{header}"
+        f"{_render_role_objects(output)}"
         "</article>"
     )
 
@@ -318,11 +421,10 @@ def _render_call_studio(output: CallCoaching, run: SavedRun | None) -> str:
     project_str = f"project {_e(run.project)} · " if run is not None else ""
     meta_html = (
         '<div class="meta-row">'
-        f'<span class="meta-chip">{_e(run_id_str)}{_e(project_str)}{_e(version_str)} · engine {_e(engine_str)}</span>'
-        '</div>'
+        f'<span class="meta-chip">{_e(run_id_str)}{project_str}{_e(version_str)} · engine {_e(engine_str)}</span>'
+        "</div>"
     )
     banner_html = f'<p class="source-note-banner">{_e(source_banner(output))}</p>'
-    body = _render_call_objects(output)
     return (
         '<article class="result studio-ok">'
         '<header class="module-header">'
@@ -330,7 +432,7 @@ def _render_call_studio(output: CallCoaching, run: SavedRun | None) -> str:
         f"{meta_html}"
         f"{banner_html}"
         "</header>"
-        f"{body}"
+        f"{_render_call_objects(output)}"
         "</article>"
     )
 
@@ -342,11 +444,10 @@ def _render_critic_studio(output: LessonCritique, run: SavedRun | None) -> str:
     project_str = f"project {_e(run.project)} · " if run is not None else ""
     meta_html = (
         '<div class="meta-row">'
-        f'<span class="meta-chip">{_e(run_id_str)}{_e(project_str)}{_e(version_str)} · engine {_e(engine_str)}</span>'
-        '</div>'
+        f'<span class="meta-chip">{_e(run_id_str)}{project_str}{_e(version_str)} · engine {_e(engine_str)}</span>'
+        "</div>"
     )
     banner_html = f'<p class="source-note-banner">{_e(source_banner(output))}</p>'
-    body = _render_critic_objects(output)
     return (
         '<article class="result studio-ok">'
         '<header class="module-header">'
@@ -354,9 +455,17 @@ def _render_critic_studio(output: LessonCritique, run: SavedRun | None) -> str:
         f"{meta_html}"
         f"{banner_html}"
         "</header>"
-        f"{body}"
+        f"{_render_critic_objects(output)}"
         "</article>"
     )
+
+
+def _level_abbr(level: str) -> str:
+    if level == "foundation":
+        return "L1"
+    if level == "core":
+        return "L2"
+    return "L3"
 
 
 def _generate_inline_svg_graph(nodes: list[SkillNode], edges: list[SkillEdge]) -> str:
@@ -368,22 +477,18 @@ def _generate_inline_svg_graph(nodes: list[SkillNode], edges: list[SkillEdge]) -
     gap = 40
     total_width = count * node_width + (count - 1) * gap + 40
     total_height = 80
-    
-    # Map edges by source
     edge_label_map: dict[str, str] = {}
     for edge in edges:
         edge_label_map[edge.source] = edge.relation
-
     svg_parts = [
-        f'<div class="graph-svg-wrap">',
+        '<div class="graph-svg-wrap">',
         f'<svg class="graph-svg" viewBox="0 0 {total_width} {total_height}" width="{total_width}" height="{total_height}" xmlns="http://www.w3.org/2000/svg">',
-        '<defs>',
+        "<defs>",
         '  <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">',
         '    <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#6b6860"/>',
-        '  </marker>',
-        '</defs>',
+        "  </marker>",
+        "</defs>",
     ]
-    
     for i in range(count - 1):
         x1 = 20 + (i + 1) * node_width + i * gap
         x2 = x1 + gap
@@ -392,55 +497,44 @@ def _generate_inline_svg_graph(nodes: list[SkillNode], edges: list[SkillEdge]) -
         svg_parts.append(
             f'<line x1="{x1}" y1="{y}" x2="{x2}" y2="{y}" stroke="#e4e2dc" stroke-width="2" marker-end="url(#arrow)" />'
         )
-        # Relation text on the line
         mid_x = (x1 + x2) / 2
         svg_parts.append(
             f'<text x="{mid_x}" y="{y - 6}" font-family="ui-sans-serif, system-ui, sans-serif" font-size="10" fill="#6b6860" text-anchor="middle">{_e(rel)}</text>'
         )
-
     for i, node in enumerate(nodes):
         x = 20 + i * (node_width + gap)
         y = 17
         label = node.name
         if len(label) > 16:
             label = label[:15] + "…"
-        level_abbr = "L1" if node.level == "foundation" else ("L2" if node.level == "core" else "L3")
         svg_parts.append(
             f'<rect x="{x}" y="{y}" width="{node_width}" height="{node_height}" rx="6" fill="#ffffff" stroke="#e4e2dc" stroke-width="1.5"/>'
         )
         svg_parts.append(
-            f'<text x="{x + 8}" y="{y + 16}" font-family="ui-monospace, monospace" font-size="10" fill="#6b6860">{level_abbr}</text>'
+            f'<text x="{x + 8}" y="{y + 16}" font-family="ui-monospace, monospace" font-size="10" fill="#6b6860">{_level_abbr(node.level)}</text>'
         )
         svg_parts.append(
             f'<text x="{x + 8}" y="{y + 28}" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" font-weight="600" fill="#1a1916">{_e(label)}</text>'
         )
-
-    svg_parts.append('</svg></div>')
+    svg_parts.append("</svg></div>")
     return "".join(svg_parts)
 
 
-def _render_role_objects(output: RoleEnablement) -> str:
-    # Build adjacency mapping for requires / supports / sequence
-    # Outgoing relations (supports / before / then) and incoming prerequisites (requires)
+def _render_role_graph(output: RoleEnablement) -> str:
     outgoing_map: dict[str, list[tuple[str, str]]] = {}
     incoming_map: dict[str, list[tuple[str, str]]] = {}
     for edge in output.skill_graph.edges:
         outgoing_map.setdefault(edge.source, []).append((edge.target, edge.relation))
         incoming_map.setdefault(edge.target, []).append((edge.source, edge.relation))
-
-    # 1. Skill chips summary at top of Graph object
     skill_chips = "".join(
         f'<span class="skill-chip">'
-        f'<span class="mono-caption">{"L1" if node.level == "foundation" else ("L2" if node.level == "core" else "L3")}</span> '
-        f'<strong>{_e(node.name)}</strong>'
-        f'</span>'
+        f'<span class="mono-caption">{_level_abbr(node.level)}</span> '
+        f"<strong>{_e(node.name)}</strong>"
+        "</span>"
         for node in output.skill_graph.nodes
     )
-
-    # 2. Short labeled adjacency list
     nodes_items = []
     for node in output.skill_graph.nodes:
-        level_abbr = "L1" if node.level == "foundation" else ("L2" if node.level == "core" else "L3")
         adj_tags = []
         if node.id in incoming_map:
             for src, rel in incoming_map[node.id]:
@@ -454,12 +548,11 @@ def _render_role_objects(output: RoleEnablement) -> str:
                     adj_tags.append(f'<span class="adj-tag">{_e(rel)} → {_e(tgt)}</span>')
                 else:
                     adj_tags.append(f'<span class="adj-tag">{_e(rel)} {_e(tgt)}</span>')
-        
         adj_html = f'<div class="graph-adj-row">{" ".join(adj_tags)}</div>' if adj_tags else ""
         nodes_items.append(
             '<li class="graph-node-row">'
             '<div class="graph-node-head">'
-            f'<span class="mono-caption">{level_abbr}</span> '
+            f'<span class="mono-caption">{_level_abbr(node.level)}</span> '
             f'<span class="graph-node-name">{_e(node.name)}</span>'
             "</div>"
             f'<p class="graph-node-detail">{_e(node.detail)}</p>'
@@ -467,7 +560,16 @@ def _render_role_objects(output: RoleEnablement) -> str:
             "</li>"
         )
     nodes_html = "".join(nodes_items) if nodes_items else "<li>No skill nodes.</li>"
+    return (
+        '<section class="skill-graph object">'
+        '<h3>Graph <span class="object-tag">Skills</span></h3>'
+        f'<div class="skill-chips-row">{skill_chips}</div>'
+        f'<ol class="graph-list">{nodes_html}</ol>'
+        "</section>"
+    )
 
+
+def _render_role_objectives(output: RoleEnablement) -> str:
     objectives = "".join(
         "<li>"
         f'<span class="mono-caption">{_e(item.id)}</span> '
@@ -478,7 +580,15 @@ def _render_role_objects(output: RoleEnablement) -> str:
     )
     if not objectives:
         objectives = "<li>No objectives.</li>"
+    return (
+        '<section class="objectives object">'
+        '<h3>Objectives <span class="object-tag">Measurable</span></h3>'
+        f'<ol class="objectives-list">{objectives}</ol>'
+        "</section>"
+    )
 
+
+def _render_role_outline(output: RoleEnablement) -> str:
     outline = "".join(
         '<li class="timeline-item">'
         f'<span class="timeline-time mono-caption">{_e(block.minutes)} min</span> '
@@ -489,10 +599,30 @@ def _render_role_objects(output: RoleEnablement) -> str:
         "</li>"
         for block in output.outline
     )
+    return (
+        '<section class="outline object">'
+        '<h3>Outline <span class="object-tag">30 Min</span></h3>'
+        f'<ol class="timeline">{outline}</ol>'
+        "</section>"
+    )
 
+
+def _render_role_practice(output: RoleEnablement) -> str:
     steps = "".join(f"<li>{_e(step)}</li>" for step in output.practice.instructions)
     success = "".join(f"<li>{_e(item)}</li>" for item in output.practice.success_criteria)
+    return (
+        '<section class="practice object">'
+        f'<h3>Practice <span class="object-tag">{_e(output.practice.title)}</span></h3>'
+        '<div class="scenario-card">'
+        f'<div class="scenario-section"><span class="scenario-label">Situation</span><p class="scenario-text">{_e(output.practice.scenario)}</p></div>'
+        f'<div class="scenario-section"><span class="scenario-label">Steps</span><ol class="practice-steps">{steps}</ol></div>'
+        f'<div class="scenario-section"><span class="scenario-label">Success</span><ul class="practice-success">{success}</ul></div>'
+        "</div>"
+        "</section>"
+    )
 
+
+def _render_role_quiz(output: RoleEnablement) -> str:
     quiz = []
     for index, item in enumerate(output.quiz, start=1):
         choices = "".join(
@@ -507,38 +637,26 @@ def _render_role_objects(output: RoleEnablement) -> str:
             f'<p class="quiz-prompt">{index}. {_e(item.question)}</p>'
             f'<ul class="quiz-choices">{choices}</ul>'
             '<details class="quiz-details">'
-            '<summary>Answer &amp; rationale</summary>'
+            "<summary>Answer &amp; rationale</summary>"
             f'<div class="quiz-details-content"><strong>Answer:</strong> {_e(item.answer)}<br><strong>Why:</strong> {_e(item.rationale)}</div>'
-            '</details>'
+            "</details>"
             "</li>"
         )
-
     return (
-        '<section class="skill-graph object">'
-        '<h3>Graph <span class="object-tag">Skills</span></h3>'
-        f'<div class="skill-chips-row">{skill_chips}</div>'
-        f'<ol class="graph-list">{nodes_html}</ol>'
-        "</section>"
-        '<section class="objectives object">'
-        '<h3>Objectives <span class="object-tag">Measurable</span></h3>'
-        f'<ol class="objectives-list">{objectives}</ol>'
-        "</section>"
-        '<section class="outline object">'
-        '<h3>Outline <span class="object-tag">30 Min</span></h3>'
-        f'<ol class="timeline">{outline}</ol>'
-        "</section>"
-        f'<section class="practice object">'
-        f'<h3>Practice <span class="object-tag">{_e(output.practice.title)}</span></h3>'
-        '<div class="scenario-card">'
-        f'<div class="scenario-section"><span class="scenario-label">Situation</span><p class="scenario-text">{_e(output.practice.scenario)}</p></div>'
-        f'<div class="scenario-section"><span class="scenario-label">Steps</span><ol class="practice-steps">{steps}</ol></div>'
-        f'<div class="scenario-section"><span class="scenario-label">Success</span><ul class="practice-success">{success}</ul></div>'
-        '</div>'
-        "</section>"
         '<section class="quiz object">'
         '<h3>Quiz <span class="object-tag">Application</span></h3>'
         f'<ol class="quiz-list">{"".join(quiz)}</ol>'
         "</section>"
+    )
+
+
+def _render_role_objects(output: RoleEnablement) -> str:
+    return (
+        _render_role_graph(output)
+        + _render_role_objectives(output)
+        + _render_role_outline(output)
+        + _render_role_practice(output)
+        + _render_role_quiz(output)
     )
 
 
@@ -547,13 +665,12 @@ def _render_call_objects(output: CallCoaching) -> str:
     speakers = ""
     if output.speakers:
         speakers = f'<p class="mono-caption">Speakers: {_e(", ".join(output.speakers))}</p>'
-    
     note_cards = "".join(
         '<div class="note-card">'
         f'<div class="note-audience">{_e(note.audience)}</div>'
         f'<div class="note-headline">{_e(note.headline)}</div>'
         f'<div class="note-body">{_e(note.body)}</div>'
-        '</div>'
+        "</div>"
         for note in output.notes
     )
     fix = output.enablement_fix
@@ -570,7 +687,7 @@ def _render_call_objects(output: CallCoaching) -> str:
         '<section class="object">'
         f'<h3>Fix <span class="object-tag">{_e(fix.title)}</span></h3>'
         f'<div class="practice-scenario"><strong>Problem:</strong> {_e(fix.problem)}</div>'
-        f'<p><strong>Fix:</strong> {_e(fix.fix)}</p>'
+        f"<p><strong>Fix:</strong> {_e(fix.fix)}</p>"
         f'<p class="mono-caption">Measure: {_e(fix.measure)}</p>'
         "</section>"
     )
@@ -579,7 +696,7 @@ def _render_call_objects(output: CallCoaching) -> str:
 def _render_critic_objects(output: LessonCritique) -> str:
     scores = output.scores
     findings = "".join(
-        f"<li><span class=\"mono-caption\">[{_e(finding.severity)}]</span> <strong>{_e(finding.area)}:</strong> {_e(finding.detail)}</li>"
+        f'<li><span class="mono-caption">[{_e(finding.severity)}]</span> <strong>{_e(finding.area)}:</strong> {_e(finding.detail)}</li>'
         for finding in output.findings
     )
     rewrite = output.rewrite
@@ -591,7 +708,7 @@ def _render_critic_objects(output: LessonCritique) -> str:
         f'<div class="score-card"><div class="score-num">{_e(scores.activity_alignment)}</div><div class="score-label">Activity Alignment</div></div>'
         f'<div class="score-card"><div class="score-num">{_e(scores.assessment_alignment)}</div><div class="score-label">Assessment Alignment</div></div>'
         f'<div class="score-card"><div class="score-num">{_e(scores.overall)}</div><div class="score-label">Overall Alignment</div></div>'
-        '</div>'
+        "</div>"
         "</section>"
         '<section class="object">'
         '<h3>Findings <span class="object-tag">Review</span></h3>'
@@ -600,12 +717,11 @@ def _render_critic_objects(output: LessonCritique) -> str:
         '<section class="object">'
         f'<h3>Rewrite <span class="object-tag">Weakest: {_e(rewrite.target)}</span></h3>'
         f'<div class="practice-scenario"><strong>Reason:</strong> {_e(rewrite.reason)}</div>'
-        f'<p>{_e(rewrite.replacement)}</p>'
+        f"<p>{_e(rewrite.replacement)}</p>"
         "</section>"
     )
 
 
-# Kept for backward-compatibility if imported elsewhere
 def _render_role(output: RoleEnablement) -> str:
     return _render_role_objects(output)
 
@@ -642,10 +758,10 @@ def _compare_block(
         return (
             '<section class="compare">'
             "<h2>Compare Role runs</h2>"
-            f'<div class="meta-row" style="margin-bottom: 0.85rem;">'
+            '<div class="meta-row" style="margin-bottom: 0.85rem;">'
             f'<span class="meta-chip">A · run {run.id} · {run.product.value} v{run.version} · {_e(run.title)}</span>'
             f'<span class="meta-chip">B · run {compare_run.id} · {compare_run.product.value} v{compare_run.version} · {_e(compare_run.title)}</span>'
-            '</div>'
+            "</div>"
             '<div class="compare-grid">'
             f'<div class="compare-col"><div class="compare-col-head">A · run {run.id} (v{run.version})</div>'
             f"{_render_role_studio(output, run, run.input_text)}</div>"
@@ -682,7 +798,6 @@ def _runs_block(
         is_current = current_id is not None and item.id == current_id
         version_tag_class = "run-version-tag current-version" if is_current else "run-version-tag"
         invalid_chip = '<span class="invalid-chip">Invalid</span> ' if item.invalid else ""
-        
         extra = ""
         if (
             current_id is not None
@@ -691,17 +806,16 @@ def _runs_block(
             and product is Product.ROLE
         ):
             extra = (
-                f'<a class="compare-btn" href="/?run={current_id}'
-                f'&amp;compare={item.id}">Compare</a>'
+                f'<a class="compare-btn" href="{_e(role_path(current_id, compare=item.id))}">Compare</a>'
             )
         items.append(
             "<li>"
-            f'<a class="run-link" href="/?run={item.id}">'
+            f'<a class="run-link" href="{_e(role_path(item.id))}">'
             f'<span class="{version_tag_class}">v{item.version}</span> '
-            f'{invalid_chip}'
-            f'<span>{_e(item.title)}</span> '
+            f"{invalid_chip}"
+            f"<span>{_e(item.title)}</span> "
             f'<span class="mono-caption">{_e(item.engine.value)}</span>'
-            f'</a>'
+            "</a>"
             f"{extra}"
             "</li>"
         )

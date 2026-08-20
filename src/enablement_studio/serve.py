@@ -7,7 +7,12 @@ from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse
 
-from enablement_studio.html_render import render_page
+from enablement_studio.html_render import (
+    render_landing,
+    render_page,
+    resolve_role_step,
+    role_path,
+)
 from enablement_studio.models import Product, SavedRun
 from enablement_studio.paths import default_db_path, demo_text
 from enablement_studio.runs import generate_and_save, output_from_run
@@ -21,6 +26,10 @@ BIND_EXPOSURE_WARNING = (
     "warning: --host 0.0.0.0 exposes stored job postings and transcripts "
     "on the LAN with no authentication. Default bind is 127.0.0.1."
 )
+NEXT_NOTE = {
+    Product.CALL: "Call is next.",
+    Product.CRITIC: "Critic is next.",
+}
 
 
 def bind_exposure_warning(host: str) -> str | None:
@@ -31,7 +40,7 @@ def bind_exposure_warning(host: str) -> str | None:
 
 def serve(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> None:
     httpd = make_server(host, port)
-    print(f"Enablement Studio local UI  http://{host}:{port}")
+    print(f"Tablework local UI  http://{host}:{port}")
     print("Loopback by default. Same SQLite store as the CLI. Ctrl-C to stop.")
     warning = bind_exposure_warning(host)
     if warning:
@@ -49,16 +58,80 @@ def make_server(host: str = DEFAULT_HOST, port: int = 0) -> HTTPServer:
 
 
 class EnablementHandler(BaseHTTPRequestHandler):
-    server_version = "EnablementStudio/0.1"
+    server_version = "Tablework/0.1"
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
-        if parsed.path != "/":
+        path = _normalize_path(parsed.path)
+        query = parse_qs(parsed.query, keep_blank_values=True)
+        if path == "/":
+            self._get_home(query)
+            return
+        if path == "/role":
+            self._get_role(query)
+            return
+        if path == "/call":
+            self._redirect("/?next=call", status=302)
+            return
+        if path == "/critic":
+            self._redirect("/?next=critic", status=302)
+            return
+        self._send(404, _error_page("Not found."))
+
+    def do_POST(self) -> None:
+        parsed = urlparse(self.path)
+        path = _normalize_path(parsed.path)
+        if path not in {"/", "/role"}:
             self._send(404, _error_page("Not found."))
             return
-        query = parse_qs(parsed.query, keep_blank_values=True)
+        if not _csrf_ok(self):
+            self._send(403, _error_page("cross-origin POST rejected."))
+            return
+        try:
+            fields = self._read_form()
+        except ValueError as exc:
+            self._send(400, _form_error(str(exc)))
+            return
+        if path == "/":
+            product = _product_or_none(fields.get("product", ""))
+            if product is not Product.ROLE:
+                self._redirect("/", status=302)
+                return
+        self._post_role(fields)
+
+    def log_message(self, fmt: str, *args: Any) -> None:
+        return None
+
+    def _get_home(self, query: dict[str, list[str]]) -> None:
+        product = _product_or_none(_first(query, "product"))
+        if product is Product.ROLE:
+            self._redirect(_legacy_role_location(query), status=302)
+            return
+        if product in {Product.CALL, Product.CRITIC}:
+            self._redirect(f"/?next={product.value}", status=302)
+            return
+        run_raw = _first(query, "run")
+        if run_raw:
+            try:
+                run = Store(default_db_path()).get_run(int(run_raw))
+            except (KeyError, ValueError, OverflowError, sqlite3.Error):
+                self._send(404, _error_page(f"run {run_raw} not found"))
+                return
+            if run.product is Product.ROLE:
+                self._redirect(_legacy_role_location(query), status=302)
+                return
+            self._redirect(f"/?next={run.product.value}", status=302)
+            return
+        next_raw = _first(query, "next")
+        notice = None
+        if next_raw == Product.CALL.value:
+            notice = NEXT_NOTE[Product.CALL]
+        elif next_raw == Product.CRITIC.value:
+            notice = NEXT_NOTE[Product.CRITIC]
+        self._send(200, render_landing(notice=notice))
+
+    def _get_role(self, query: dict[str, list[str]]) -> None:
         store = Store(default_db_path())
-        product = _product_or_none(_first(query, "product")) or Product.ROLE
         project = _first(query, "project") or DEFAULT_PROJECT
         text = ""
         error: str | None = None
@@ -75,12 +148,14 @@ class EnablementHandler(BaseHTTPRequestHandler):
             except (KeyError, ValueError, OverflowError, sqlite3.Error):
                 self._send(404, _error_page(f"run {run_raw} not found"))
                 return
-            product = run.product
+            if run.product is not Product.ROLE:
+                self._redirect(f"/?next={run.product.value}", status=302)
+                return
             project = run.project
             text = run.input_text
         elif _first(query, "demo") == "1":
             try:
-                text = demo_text(product.value)
+                text = demo_text(Product.ROLE.value)
             except (FileNotFoundError, ValueError) as exc:
                 error = str(exc)
         if compare_raw:
@@ -90,52 +165,38 @@ class EnablementHandler(BaseHTTPRequestHandler):
             except (KeyError, ValueError, OverflowError, sqlite3.Error):
                 self._send(404, _error_page(f"run {compare_raw} not found"))
                 return
+        step = resolve_role_step(_first(query, "step"), run=run, output=output)
         body = render_page(
-            product=product,
+            product=Product.ROLE,
             project=project,
             text=text,
-            runs=store.list_runs(project=project, product=product),
+            runs=store.list_runs(project=project, product=Product.ROLE),
             error=error,
             output=output,
             run=run,
             compare_output=compare_output,
             compare_run=compare_run,
+            step=step,
         )
         self._send(200, body)
 
-    def do_POST(self) -> None:
-        parsed = urlparse(self.path)
-        if parsed.path != "/":
-            self._send(404, _error_page("Not found."))
-            return
-        if not _csrf_ok(self):
-            self._send(403, _error_page("cross-origin POST rejected."))
-            return
-        try:
-            fields = self._read_form()
-        except ValueError as exc:
-            self._send(400, _form_error(str(exc)))
-            return
-        product = _product_or_none(fields.get("product", ""))
-        if product is None:
-            self._send(200, _form_error("Choose Role, Call, or Critic from the benches.", fields=fields))
-            return
+    def _post_role(self, fields: dict[str, str]) -> None:
         project = fields.get("project", "").strip() or DEFAULT_PROJECT
         action = fields.get("action", "run").strip() or "run"
         text = fields.get("text", "")
         if action == "demo":
             try:
-                text = demo_text(product.value)
+                text = demo_text(Product.ROLE.value)
             except (FileNotFoundError, ValueError) as exc:
                 self._send(200, _form_error(str(exc), fields=fields))
                 return
         if not text.strip():
-            self._send(200, _form_error(_empty_run_message(product), fields=fields))
+            self._send(200, _form_error(_empty_run_message(Product.ROLE), fields=fields))
             return
         store = Store(default_db_path())
         try:
             _output, _engine, run = generate_and_save(
-                product,
+                Product.ROLE,
                 text,
                 project=project,
                 store=store,
@@ -144,10 +205,7 @@ class EnablementHandler(BaseHTTPRequestHandler):
         except ValueError as exc:
             self._send(200, _form_error(str(exc), fields=fields))
             return
-        self._redirect(f"/?{urlencode({'run': str(run.id)})}")
-
-    def log_message(self, fmt: str, *args: Any) -> None:
-        return None
+        self._redirect(role_path(run.id, "graph"), status=303)
 
     def _read_form(self) -> dict[str, str]:
         length_raw = self.headers.get("Content-Length", "0")
@@ -170,11 +228,28 @@ class EnablementHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
-    def _redirect(self, location: str) -> None:
-        self.send_response(303)
+    def _redirect(self, location: str, status: int = 302) -> None:
+        self.send_response(status)
         self.send_header("Location", location)
         self.send_header("Content-Length", "0")
         self.end_headers()
+
+
+def _normalize_path(path: str) -> str:
+    if path != "/" and path.endswith("/"):
+        return path.rstrip("/") or "/"
+    return path or "/"
+
+
+def _legacy_role_location(query: dict[str, list[str]]) -> str:
+    params: dict[str, str] = {}
+    for key in ("project", "demo", "run", "compare", "step"):
+        value = _first(query, key)
+        if value is not None:
+            params[key] = value
+    if not params:
+        return "/role"
+    return "/role?" + urlencode(params)
 
 
 def _csrf_ok(handler: EnablementHandler) -> bool:
@@ -229,21 +304,21 @@ def _empty_run_message(product: Product) -> str:
 
 def _form_error(message: str, fields: dict[str, str] | None = None) -> str:
     data = fields or {}
-    product = _product_or_none(data.get("product")) or Product.ROLE
     project = (data.get("project") or DEFAULT_PROJECT).strip() or DEFAULT_PROJECT
     store = Store(default_db_path())
     return render_page(
-        product=product,
+        product=Product.ROLE,
         project=project,
         text=data.get("text", ""),
-        runs=store.list_runs(project=project, product=product),
+        runs=store.list_runs(project=project, product=Product.ROLE),
         error=message,
+        step="source",
     )
 
 
 def _error_page(message: str) -> str:
     return (
         "<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'>"
-        f"<title>Enablement Studio</title></head><body><p>{escape(message)}</p>"
+        f"<title>Tablework</title></head><body><p>{escape(message)}</p>"
         "<p><a href='/'>Back</a></p></body></html>"
     )
