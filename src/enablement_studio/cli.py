@@ -5,28 +5,12 @@ import json
 import sys
 from pathlib import Path
 
-from enablement_studio.engine import generate
-from enablement_studio.models import (
-    CallCoaching,
-    LessonCritique,
-    Product,
-    ProductOutput,
-    RoleEnablement,
-    SavedRun,
-    artifact_map,
-    call_from_dict,
-    critic_from_dict,
-    role_from_dict,
-)
-from enablement_studio.paths import default_db_path, find_fixture
+from enablement_studio.models import Product
+from enablement_studio.paths import DEMO_FILES, default_db_path, find_fixture
 from enablement_studio.render import render_compare, render_output, render_run_list
+from enablement_studio.runs import generate_and_save, output_from_run
+from enablement_studio.serve import DEFAULT_HOST, DEFAULT_PORT, serve
 from enablement_studio.store import Store
-
-DEMO_FILES = {
-    Product.ROLE: "example_account_executive_job.txt",
-    Product.CALL: "example_sales_call.txt",
-    Product.CRITIC: "example_new_hire_lesson.md",
-}
 
 DEMO_PROJECT = "example"
 
@@ -75,12 +59,29 @@ def _build_parser() -> argparse.ArgumentParser:
     compare.add_argument("left_id", type=int)
     compare.add_argument("right_id", type=int)
     compare.set_defaults(handler=_cmd_compare)
+
+    served = sub.add_parser(
+        "serve",
+        help="Local web UI on loopback (default 127.0.0.1:8765).",
+    )
+    served.add_argument(
+        "--host",
+        default=DEFAULT_HOST,
+        help="Bind address (default 127.0.0.1, not 0.0.0.0).",
+    )
+    served.add_argument(
+        "--port",
+        type=int,
+        default=DEFAULT_PORT,
+        help="Bind port (default 8765).",
+    )
+    served.set_defaults(handler=_cmd_serve)
     return parser
 
 
 def _cmd_demo(args: argparse.Namespace) -> int:
     product = Product(args.product)
-    path = find_fixture(DEMO_FILES[product])
+    path = find_fixture(DEMO_FILES[product.value])
     return _run_product(
         product,
         path.read_text(encoding="utf-8"),
@@ -106,7 +107,7 @@ def _cmd_show(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(run.artifacts.get("result", {}), indent=2))
         return 0
-    output = _output_from_run(run)
+    output = output_from_run(run)
     sys.stdout.write(render_output(output, run))
     return 0
 
@@ -119,19 +120,17 @@ def _cmd_compare(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_serve(args: argparse.Namespace) -> int:
+    try:
+        serve(host=args.host, port=args.port)
+    except KeyboardInterrupt:
+        print("\nStopped.", file=sys.stderr)
+        return 0
+    return 0
+
+
 def _run_product(product: Product, text: str, *, project: str, as_json: bool) -> int:
-    output, engine = generate(product, text)
-    store = Store(default_db_path())
-    invalid = bool(getattr(output, "invalid", False))
-    run = store.save_run(
-        project=project,
-        product=product,
-        title=_title_of(output),
-        input_text=text,
-        engine=engine,
-        artifacts=artifact_map(output),
-        invalid=invalid,
-    )
+    output, _engine, run = generate_and_save(product, text, project=project)
     if as_json:
         print(json.dumps(output.to_dict(), indent=2))
         return 0
@@ -147,32 +146,3 @@ def _read_input(path: Path | None, text: str | None) -> str:
     if str(path) == "-":
         return sys.stdin.read()
     return path.read_text(encoding="utf-8")
-
-
-def _title_of(output: ProductOutput) -> str:
-    match output:
-        case RoleEnablement():
-            return output.role_title
-        case CallCoaching():
-            return output.call_title
-        case LessonCritique():
-            return output.lesson_title
-        case _:
-            never: ProductOutput = output
-            raise TypeError(f"unsupported output: {type(never)!r}")
-
-
-def _output_from_run(run: SavedRun) -> ProductOutput:
-    payload = run.artifacts.get("result")
-    if not isinstance(payload, dict):
-        raise ValueError(f"run {run.id} has no result artifact")
-    match run.product:
-        case Product.ROLE:
-            return role_from_dict(payload)
-        case Product.CALL:
-            return call_from_dict(payload)
-        case Product.CRITIC:
-            return critic_from_dict(payload)
-        case _:
-            never = run.product
-            raise ValueError(f"unsupported product: {never}")

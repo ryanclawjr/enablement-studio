@@ -33,7 +33,7 @@ Repository = "https://github.com/ryanclawjr/enablement-studio"
 where = ["src"]
 
 [tool.setuptools.package-data]
-enablement_studio = ["py.typed", "store/schema.sql", "fixtures/*"]
+enablement_studio = ["py.typed", "store/schema.sql", "fixtures/*", "templates/*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
