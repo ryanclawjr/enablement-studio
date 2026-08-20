@@ -32,6 +32,13 @@ def schema_path() -> Path:
     raise FileNotFoundError("schema.sql not found")
 
 
+DEMO_FILES = {
+    "role": "example_account_executive_job.txt",
+    "call": "example_sales_call.txt",
+    "critic": "example_new_hire_lesson.md",
+}
+
+
 def find_fixture(filename: str) -> Path:
     candidates = [
         Path.cwd() / "fixtures" / filename,
@@ -44,3 +51,11 @@ def find_fixture(filename: str) -> Path:
         if path.is_file():
             return path
     raise FileNotFoundError(f"fixture not found: {filename}")
+
+
+def demo_text(product: str) -> str:
+    try:
+        filename = DEMO_FILES[product]
+    except KeyError as exc:
+        raise ValueError(f"unknown product: {product}") from exc
+    return find_fixture(filename).read_text(encoding="utf-8")

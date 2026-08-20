@@ -83,8 +83,11 @@ A scavenger-hunt activity against "explain interchange" fails alignment. The rew
 - A canned AE-template blob must fail the title-swap test. Role output on the Stripe eval fixture must pass it.
 - `pytest` stays green with no API keys.
 
+## Local UI
+
+`enablement serve` is a loopback page over the same `generate()` entry and SQLite store. Default bind is 127.0.0.1:8765. No auth. No public site. Offline is the product; the optional LLM hook is the same one the CLI uses.
+
 ## Out of scope
 
-- No local web UI.
 - No domain, hosting, or Autonoma merge.
 - No new products.

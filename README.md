@@ -54,6 +54,16 @@ enablement compare 1 2
 
 `pytest` exercises the same offline path. No keys required.
 
+## Local UI
+
+Same three products, same SQLite file, no API key.
+
+```bash
+enablement serve
+```
+
+That binds **127.0.0.1:8765** (loopback only; pass `--host` / `--port` to change). Open http://127.0.0.1:8765, pick Role / Call / Critic, paste a job, SOP, transcript, or outline, or load a packaged demo fixture. Run writes to the same `data/enablement.db` the CLI uses. There is no login and no cloud database.
+
 ## Sample data
 
 The three demo fixtures are labeled **EXAMPLE DATA**. Harborline Payments, Maple Street Bakery, Alex Rivera, and Jordan Kim are invented. Rates, promos, and quotas in the samples are not real and are not from a live employer or customer.
@@ -72,6 +82,7 @@ src/enablement_studio/
   call/      # Call → Coach
   critic/    # Lesson critic
   prompts.py # Per-product LLM system prompts
+  serve.py   # Local UI (stdlib http.server)
   store/     # SQLite projects, runs, artifacts
 fixtures/    # Fictional demo inputs
 data/        # schema.sql; enablement.db created locally

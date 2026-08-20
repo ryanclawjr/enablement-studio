@@ -76,6 +76,12 @@ def product_label(product: Product) -> str:
     return labels[product]
 
 
+def source_banner(output: ProductOutput) -> str:
+    if output.example_data:
+        return "EXAMPLE DATA — fictional sample. Not from a live employer or customer."
+    return output.source_note
+
+
 def _header(output: ProductOutput, run: SavedRun | None) -> str:
     if isinstance(output, RoleEnablement):
         product = Product.ROLE
@@ -86,9 +92,7 @@ def _header(output: ProductOutput, run: SavedRun | None) -> str:
     else:
         product = Product.CRITIC
         title = output.lesson_title
-    banner = "EXAMPLE DATA — fictional sample. Not from a live employer or customer."
-    if not output.example_data:
-        banner = output.source_note
+    banner = source_banner(output)
     lines = [f"Enablement Studio — {product_label(product)}", banner, title]
     if isinstance(output, RoleEnablement) and output.invalid:
         lines.append("INVALID — not a successful Role run.")
