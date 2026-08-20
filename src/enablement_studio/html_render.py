@@ -232,14 +232,14 @@ def _step_board(
         return (
             f'<div class="step-view" data-step="source">'
             "<h2>Source</h2>"
-            f"{_source_form(text, project, has_key)}"
+            f'<div class="object source-object">{_source_form(text, project, has_key)}</div>'
             "</div>"
         )
     if not isinstance(output, RoleEnablement):
         return (
             f'<div class="step-view" data-step="source">'
             "<h2>Source</h2>"
-            f"{_source_form(text, project, has_key)}"
+            f'<div class="object source-object">{_source_form(text, project, has_key)}</div>'
             "</div>"
         )
     inner = _role_step_inner(step, output, run, text)
@@ -485,7 +485,7 @@ def _generate_inline_svg_graph(nodes: list[SkillNode], edges: list[SkillEdge]) -
         f'<svg class="graph-svg" viewBox="0 0 {total_width} {total_height}" width="{total_width}" height="{total_height}" xmlns="http://www.w3.org/2000/svg">',
         "<defs>",
         '  <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">',
-        '    <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#6b6860"/>',
+        '    <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#8a8a84"/>',
         "  </marker>",
         "</defs>",
     ]
@@ -495,11 +495,11 @@ def _generate_inline_svg_graph(nodes: list[SkillNode], edges: list[SkillEdge]) -
         y = 35
         rel = edge_label_map.get(nodes[i].id, "then")
         svg_parts.append(
-            f'<line x1="{x1}" y1="{y}" x2="{x2}" y2="{y}" stroke="#e4e2dc" stroke-width="2" marker-end="url(#arrow)" />'
+            f'<line x1="{x1}" y1="{y}" x2="{x2}" y2="{y}" stroke="#2a2a2a" stroke-width="2" marker-end="url(#arrow)" />'
         )
         mid_x = (x1 + x2) / 2
         svg_parts.append(
-            f'<text x="{mid_x}" y="{y - 6}" font-family="ui-sans-serif, system-ui, sans-serif" font-size="10" fill="#6b6860" text-anchor="middle">{_e(rel)}</text>'
+            f'<text x="{mid_x}" y="{y - 6}" font-family="ui-sans-serif, system-ui, sans-serif" font-size="10" fill="#8a8a84" text-anchor="middle">{_e(rel)}</text>'
         )
     for i, node in enumerate(nodes):
         x = 20 + i * (node_width + gap)
@@ -508,13 +508,13 @@ def _generate_inline_svg_graph(nodes: list[SkillNode], edges: list[SkillEdge]) -
         if len(label) > 16:
             label = label[:15] + "…"
         svg_parts.append(
-            f'<rect x="{x}" y="{y}" width="{node_width}" height="{node_height}" rx="6" fill="#ffffff" stroke="#e4e2dc" stroke-width="1.5"/>'
+            f'<rect x="{x}" y="{y}" width="{node_width}" height="{node_height}" rx="6" fill="#161616" stroke="#2a2a2a" stroke-width="1.5"/>'
         )
         svg_parts.append(
-            f'<text x="{x + 8}" y="{y + 16}" font-family="ui-monospace, monospace" font-size="10" fill="#6b6860">{_level_abbr(node.level)}</text>'
+            f'<text x="{x + 8}" y="{y + 16}" font-family="ui-monospace, monospace" font-size="10" fill="#8a8a84">{_level_abbr(node.level)}</text>'
         )
         svg_parts.append(
-            f'<text x="{x + 8}" y="{y + 28}" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" font-weight="600" fill="#1a1916">{_e(label)}</text>'
+            f'<text x="{x + 8}" y="{y + 28}" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" font-weight="600" fill="#f4f4f1">{_e(label)}</text>'
         )
     svg_parts.append("</svg></div>")
     return "".join(svg_parts)
