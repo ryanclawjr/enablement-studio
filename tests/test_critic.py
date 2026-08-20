@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enablement_studio.critic import generate_critic
+from enablement_studio.paths import find_fixture
 
 
 def test_critic_flags_misaligned_lesson(lesson_text: str) -> None:
@@ -41,3 +42,25 @@ def test_critic_rejects_empty() -> None:
         assert "empty" in str(exc)
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_aligned_interchange_lesson_is_not_a_miss() -> None:
+    text = find_fixture("eval_aligned_interchange_lesson.md").read_text(encoding="utf-8")
+    result = generate_critic(text)
+    assert result.scores.activity_alignment >= 4
+    assert result.scores.assessment_alignment >= 4
+    assert result.scores.overall >= 4
+    rewrite = result.rewrite.replacement.lower()
+    assert "buyer" not in rewrite
+    assert "weekend cash" not in rewrite
+    assert "interchange" in rewrite
+
+
+def test_pallet_jack_rewrite_stays_warehouse() -> None:
+    text = find_fixture("eval_pallet_jack_lesson.md").read_text(encoding="utf-8")
+    result = generate_critic(text)
+    rewrite = result.rewrite.replacement.lower()
+    assert "pallet" in rewrite or "warehouse" in rewrite
+    assert "buyer" not in rewrite
+    assert "weekend cash" not in rewrite
+    assert "small-business owner" not in rewrite

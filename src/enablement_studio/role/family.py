@@ -4,7 +4,12 @@ import re
 from enum import Enum
 
 _ENABLEMENT_TITLE = re.compile(
-    r"enablement|l\s*&\s*d|learning and development|instructional design",
+    r"enablement|l\s*&\s*d|learning and development|"
+    r"instructional design|learning experience|\blxd\b|"
+    r"customer education|customer training|"
+    r"nurse educator|clinical educator|clinical instructor|"
+    r"director,?\s*training|training director|head of training|"
+    r"onboarding specialist|learning designer|curriculum designer",
     re.I,
 )
 _ENABLEMENT_PHRASES = (
@@ -16,9 +21,13 @@ _ENABLEMENT_PHRASES = (
     "technical enablement",
     "learning and development",
     "instructional design",
+    "learning experience",
+    "customer education",
     "just-in-time learning",
     "skill and knowledge gap",
     "skill and knowledge gaps",
+    "skills lab",
+    "skills-lab",
 )
 _SELLER_TITLE = re.compile(
     r"account executive|sales engineer|sales development|"
@@ -31,6 +40,7 @@ _FIELD_SA_TITLE = re.compile(r"solution architect", re.I)
 class JobFamily(str, Enum):
     ENABLEMENT = "enablement"
     SELLER = "seller"
+    UNKNOWN = "unknown"
 
 
 def classify_job_family(source: str, title: str = "") -> JobFamily:
@@ -44,4 +54,4 @@ def classify_job_family(source: str, title: str = "") -> JobFamily:
         return JobFamily.SELLER
     if _FIELD_SA_TITLE.search(heading) and "enablement" not in heading.lower():
         return JobFamily.SELLER
-    return JobFamily.SELLER
+    return JobFamily.UNKNOWN

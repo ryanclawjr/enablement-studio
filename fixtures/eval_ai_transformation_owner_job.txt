@@ -1,0 +1,13 @@
+EXAMPLE DATA — fictional job posting. Not from a live employer.
+
+Job title: AI Transformation Owner, Product
+Company: Glasspond Tools (invented)
+
+About the role
+Own the sequence of internal AI workflow changes. This is not a seller seat.
+
+Responsibilities
+- Sequence the product roadmap for internal drafting tools
+- Unblock design and engineering on the next workflow cutover
+- Report adoption of the new drafting workflow
+- Write the decision log after each experiment

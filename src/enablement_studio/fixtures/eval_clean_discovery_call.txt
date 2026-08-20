@@ -1,0 +1,24 @@
+EXAMPLE DATA — fictional sales call. Not a real customer recording.
+Harborline Payments and Maple Street Bakery are invented names.
+
+Call: Discovery call, Harborline Payments (example)
+Account Executive: Alex Rivera
+Prospect: Jordan Kim
+
+Alex Rivera: Jordan, thanks for meeting. Before I talk product, how do you
+take cards today?
+
+Jordan Kim: We use a local ISO. Weekends at the market, payouts lag.
+
+Alex Rivera: What happens when a payout slips? Who else feels that?
+
+Jordan Kim: I stay late and my baker waits on flour money.
+
+Alex Rivera: What would success look like in thirty days?
+
+Jordan Kim: Same-week payouts I can explain to my baker.
+
+Alex Rivera: I can walk a checkout path that matches that. Thursday at ten
+to review the notes together?
+
+Jordan Kim: Thursday at ten works. I will bring the baker.

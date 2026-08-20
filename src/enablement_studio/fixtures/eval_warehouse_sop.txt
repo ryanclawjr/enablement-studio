@@ -1,0 +1,11 @@
+EXAMPLE DATA — fictional warehouse SOP. Not from a live employer.
+
+Title: Warehouse pick, pack, and pallet-jack SOP
+Site: Dock 4, invented fulfillment floor
+
+Procedure
+- Pick items to the tote in location order and confirm the SKU
+- Pack the carton, add the label, and close the flaps before it leaves the bench
+- Move pallets with a pallet jack only after the travel path is clear
+- Stop if a jack wheel binds; do not ride the jack in the aisle
+- Teach-back: name the three stop points before the next lift

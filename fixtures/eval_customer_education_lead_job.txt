@@ -1,0 +1,13 @@
+EXAMPLE DATA — fictional job posting. Not from a live employer.
+
+Job title: Customer Education Lead
+Company: Quilted Software (invented)
+
+About the role
+Customers need to go live without a war room. You design that path.
+
+Responsibilities
+- Design onboarding lessons for customers going live on the product
+- Train the trainers who run weekly office hours
+- Write practice tasks that use product nouns from the release notes
+- Report whether education reduced repeat support tickets

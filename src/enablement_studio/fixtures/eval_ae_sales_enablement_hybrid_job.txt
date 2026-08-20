@@ -1,0 +1,14 @@
+EXAMPLE DATA — fictional job posting. Not from a live employer.
+
+Job title: Account Executive, Sales Enablement
+Company: Harborline Payments (example, invented)
+
+About the role
+This person designs practice for account executives. They do not run a
+personal book.
+
+Responsibilities
+- Design onboarding for new account executives
+- Package talk tracks and scored practice for first conversations
+- Identify skill gaps from call reviews, then build a weekly drill
+- Measure whether the program changed inspection-ready notes

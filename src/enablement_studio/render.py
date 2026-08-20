@@ -91,7 +91,7 @@ def _header(output: ProductOutput, run: SavedRun | None) -> str:
         banner = output.source_note
     lines = [f"Enablement Studio — {product_label(product)}", banner, title]
     if isinstance(output, RoleEnablement) and output.invalid:
-        lines.append("INVALID — title-swap test failed. Not a successful Role run.")
+        lines.append("INVALID — not a successful Role run.")
     if run is not None:
         lines.append(
             f"Run {run.id}  ·  project {run.project}  ·  v{run.version}  ·  {run.engine.value}"

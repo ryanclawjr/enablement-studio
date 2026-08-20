@@ -32,6 +32,35 @@ def test_eval_fixture_is_public_posting_not_example() -> None:
         assert banned not in text
 
 
+_EVAL_EXAMPLE = (
+    "eval_instructional_designer_job.txt",
+    "eval_learning_experience_designer_job.txt",
+    "eval_customer_education_lead_job.txt",
+    "eval_director_training_job.txt",
+    "eval_nurse_educator_job.txt",
+    "eval_warehouse_sop.txt",
+    "eval_ae_sales_enablement_hybrid_job.txt",
+    "eval_ai_transformation_owner_job.txt",
+    "eval_field_solution_architect_job.txt",
+    "eval_clean_discovery_call.txt",
+    "eval_ehr_skills_lab_call.txt",
+    "eval_aligned_interchange_lesson.md",
+    "eval_pallet_jack_lesson.md",
+)
+
+
+def test_eval_family_fixtures_are_example_data() -> None:
+    for name in _EVAL_EXAMPLE:
+        text = find_fixture(name).read_text(encoding="utf-8")
+        assert "EXAMPLE DATA" in text, name
+        lowered = text.lower()
+        assert "apply now" not in lowered
+        assert "$" not in text
+        assert "salary" not in lowered
+        for banned in ("LAPC", "Autonoma", "IDN", "SIGNIT"):
+            assert banned not in text, f"{name}: {banned}"
+
+
 def test_repo_and_package_fixtures_match() -> None:
     repo = Path(__file__).resolve().parents[1]
     packaged = repo / "src/enablement_studio/fixtures"

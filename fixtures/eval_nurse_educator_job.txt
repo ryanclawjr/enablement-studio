@@ -1,0 +1,14 @@
+EXAMPLE DATA — fictional job posting. Not from a live employer.
+
+Job title: Nurse Educator
+Company: Cedar Ward Skills Lab (invented)
+
+About the role
+New nurses must chart safely in the electronic health record before they
+work a solo shift.
+
+Responsibilities
+- Run EHR skills-lab sessions on allergy banners and the MAR
+- Assess medication-charting competency with a teach-back checklist
+- Coach new hires through a double-check they say out loud
+- Record which chart steps still fail in the lab
