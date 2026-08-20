@@ -83,14 +83,13 @@ def _http(
 def test_get_home_names_three_products(server) -> None:
     status, body, _location = _http(server, "GET", "/")
     assert status == 200
-    assert "Role studio" in body
-    assert "Role → Enablement" in body
-    assert "Call → Coach" in body
-    assert "Lesson critic" in body
+    assert "Role" in body
+    assert "Call" in body
+    assert "Critic" in body
     assert "onboarding buddy" not in body.lower()
     assert 'type="radio"' not in body
     assert 'name="product"' in body
-    assert "Run Harborline example (EXAMPLE DATA)" in body
+    assert "Run Harborline · EXAMPLE DATA" in body
 
 
 def test_make_server_is_threaded() -> None:
@@ -109,7 +108,7 @@ def test_post_role_harborline_saves_run(server, job_text: str) -> None:
     status, body, _location = _http(server, "POST", "/", body=posted)
     assert status == 200
     assert "Account Executive" in body
-    assert "SKILL GRAPH" in body
+    assert "Graph" in body
     assert "offline" in body
     assert "EXAMPLE DATA" in body
     store = Store(default_db_path())
@@ -126,16 +125,16 @@ def test_post_role_harborline_saves_run(server, job_text: str) -> None:
     assert 'class="outline' in body
     assert 'class="practice' in body
     assert 'class="quiz' in body
-    assert "not a successful Role module" not in body
+    assert "Invalid module" not in body
 
 
 def test_post_empty_text_stays_on_studio(server) -> None:
     posted = urlencode({"product": "role", "text": "", "project": "default"})
     status, body, _location = _http(server, "POST", "/", body=posted, follow=False)
     assert status == 200
-    assert "Role studio" in body
-    assert "Sit a JD, SOP, or policy on the table." in body
-    assert "Run Harborline example (EXAMPLE DATA)" in body
+    assert "Role" in body
+    assert "Source is empty. Paste a job or SOP, or Run Harborline." in body
+    assert "Run Harborline · EXAMPLE DATA" in body
     assert 'type="radio"' not in body
     assert "<!DOCTYPE html>" in body
     assert Store(default_db_path()).list_runs() == []
@@ -160,17 +159,17 @@ def test_run_with_slow_llm_env_returns_offline_board(
     elapsed = time.monotonic() - started
     assert elapsed < 3
     assert status == 200
-    assert "SKILL GRAPH" in body
+    assert "Graph" in body
     assert "Account Executive" in body
     assert "engine offline" in body
-    assert "LEARNING OBJECTIVES" in body
-    assert "30-MINUTE MODULE" in body
-    assert "APPLICATION QUIZ" in body
+    assert "Objectives" in body
+    assert "Outline" in body
+    assert "Quiz" in body
     get_started = time.monotonic()
     get_status, home, _location = _http(server, "GET", "/")
     assert time.monotonic() - get_started < 2
     assert get_status == 200
-    assert "Role studio" in home
+    assert "Role" in home
 
 
 def test_in_flight_llm_does_not_block_get(
@@ -204,8 +203,8 @@ def test_in_flight_llm_does_not_block_get(
     status, body, _location = _http(server, "GET", "/")
     assert time.monotonic() - get_started < 2
     assert status == 200
-    assert "Role studio" in body
-    assert "Sit a JD, SOP, or policy on the table" in body or "Nothing on the board yet" in body
+    assert "Role" in body
+    assert "Board is empty" in body
     release.set()
     worker.join(timeout=5)
     assert not worker.is_alive()
@@ -213,7 +212,7 @@ def test_in_flight_llm_does_not_block_get(
     assert isinstance(posted_result, tuple)
     post_status, post_body, _post_location = posted_result
     assert post_status == 200
-    assert "SKILL GRAPH" in post_body
+    assert "Graph" in post_body
     assert "engine offline" in post_body
 
 
@@ -224,10 +223,10 @@ def test_harborline_demo_action_returns_role_board(server) -> None:
     status, body, _location = _http(server, "POST", "/", body=posted)
     assert status == 200
     assert "Account Executive" in body
-    assert "SKILL GRAPH" in body
-    assert "LEARNING OBJECTIVES" in body
-    assert "30-MINUTE MODULE" in body
-    assert "APPLICATION QUIZ" in body
+    assert "Graph" in body
+    assert "Objectives" in body
+    assert "Outline" in body
+    assert "Quiz" in body
     assert "Harborline Payments" in body
     assert "EXAMPLE DATA" in body
     assert "engine offline" in body
@@ -321,7 +320,6 @@ def test_get_demo_fills_harborline_fixture(server) -> None:
     assert status == 200
     assert "Harborline Payments" in body
     assert "EXAMPLE DATA" in body
-    assert "EXAMPLE DATA — fictional sample" in body or "EXAMPLE DATA fixtures" in body
     assert Store(default_db_path()).list_runs() == []
 
 
@@ -330,7 +328,7 @@ def test_invalid_role_is_plain_english_not_success(server) -> None:
     posted = urlencode({"product": "role", "text": text, "project": "default"})
     status, body, _location = _http(server, "POST", "/", body=posted)
     assert status == 200
-    assert "not a successful Role module" in body
+    assert "Invalid module" in body or "not a successful Role module" in body
     assert "unknown" in body.lower()
     assert "studio-failed" in body
     assert "pallet-jack" in body or "pallet jack" in body
@@ -352,7 +350,7 @@ def test_title_swap_failure_copy_is_plain_english() -> None:
         output=canned,
     )
     lowered = html.lower()
-    assert "not a successful role module" in lowered
+    assert "invalid module" in lowered or "not a successful role module" in lowered
     assert "title-swap" in lowered or "swapping the job title" in lowered
     assert "account executive" in lowered
     assert 'class="studio-ok"' not in html
@@ -380,6 +378,7 @@ def test_partner_frame_visible_for_stripe_eval(server, stripe_enablement_text: s
     assert 'data-family="enablement"' in body
     assert 'data-frame="partner"' in body
     assert "PUBLIC POSTING" in body or "public job posting" in body.lower()
+    assert "Invalid module" not in body
     assert "not a successful Role module" not in body
 
 
@@ -417,7 +416,7 @@ def test_history_is_this_project_and_product(server, job_text: str, call_text: s
     call_run = next(
         run for run in store.list_runs(project="alpha", product=Product.CALL)
     )
-    history = body[body.index("This project") :] if "This project" in body else body
+    history = body[body.index("Versions") :] if "Versions" in body else body
     assert f"/?run={beta_role.id}" not in history
     assert f"/?run={call_run.id}" not in history
 

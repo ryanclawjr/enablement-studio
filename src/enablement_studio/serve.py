@@ -218,11 +218,11 @@ def _product_or_none(value: str | None) -> Product | None:
 
 def _empty_run_message(product: Product) -> str:
     if product is Product.ROLE:
-        return "Sit a JD, SOP, or policy on the table."
+        return "Source is empty. Paste a job or SOP, or Run Harborline."
     if product is Product.CALL:
-        return "Sit a transcript on the table."
+        return "Source is empty. Paste a transcript, or Run Harborline."
     if product is Product.CRITIC:
-        return "Sit an outline or storyboard on the table."
+        return "Source is empty. Paste an outline or storyboard, or Run Harborline."
     never: Product = product
     raise ValueError(f"unsupported product: {never}")
 
