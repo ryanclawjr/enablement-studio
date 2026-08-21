@@ -12,7 +12,9 @@ if str(_SRC) not in sys.path:
 from enablement_studio.session import SESSION_TTL_SECONDS, session_key
 from enablement_studio.worker_bridge import (
     apply_worker_llm_secret,
+    blob_headers,
     header_map,
+    js_copy_bytes,
     kv_options,
     resolve_session_id,
     run_public_request,
@@ -39,7 +41,9 @@ class SessionVault(DurableObject):
                 await self.ctx.storage.delete("exp")
                 return Response("", status=404)
             # storage.get("db") is a memoryview; workers.Response rejects that type.
-            return Response(bytes(blob))
+            # Response(bytes) also hands JS a WASM view and corrupts the
+            # SQLite header (workerd#6498). Copy onto the JS heap first.
+            return Response(js_copy_bytes(bytes(blob)), headers=blob_headers())
         if method == "PUT":
             body = bytes(await request.bytes())
             await self.ctx.storage.put("db", body)
@@ -68,7 +72,7 @@ class Default(WorkerEntrypoint):
         if status == 404 and path.startswith("/static/") and static is not None:
             return await static.fetch(f"https://assets.local{path}")
         return Response(
-            resp_body,
+            js_copy_bytes(resp_body),
             status=status,
             headers={name: value for name, value in resp_headers},
         )
@@ -94,10 +98,17 @@ async def _load_blob(env, session_id: str) -> bytes | None:
 async def _save_blob(env, session_id: str, blob: bytes) -> None:
     kv = getattr(env, "SESSIONS", None)
     if kv is not None:
-        await kv.put(session_key(session_id), blob, kv_options())
+        await kv.put(session_key(session_id), js_copy_bytes(blob), kv_options())
         return
     session = getattr(env, "SESSION", None)
     if session is None:
         return
     stub = session.get(session.idFromName(session_id))
-    await stub.fetch(Request("https://session.local/blob", method="PUT", body=blob))
+    await stub.fetch(
+        Request(
+            "https://session.local/blob",
+            method="PUT",
+            body=js_copy_bytes(blob),
+            headers=blob_headers(),
+        )
+    )
