@@ -38,7 +38,8 @@ class SessionVault(DurableObject):
                 await self.ctx.storage.delete("db")
                 await self.ctx.storage.delete("exp")
                 return Response("", status=404)
-            return Response(blob)
+            # storage.get("db") is a memoryview; workers.Response rejects that type.
+            return Response(bytes(blob))
         if method == "PUT":
             body = bytes(await request.bytes())
             await self.ctx.storage.put("db", body)
