@@ -1,0 +1,100 @@
+from __future__ import annotations
+
+import sys
+import time
+from pathlib import Path
+from urllib.parse import urlparse
+
+_SRC = Path(__file__).resolve().parent
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
+
+from enablement_studio.session import SESSION_TTL_SECONDS, session_key
+from enablement_studio.worker_bridge import (
+    apply_worker_llm_secret,
+    header_map,
+    kv_options,
+    resolve_session_id,
+    run_public_request,
+)
+from workers import DurableObject, Request, Response, WorkerEntrypoint
+
+
+class SessionVault(DurableObject):
+    """Per-visitor sqlite blob. Not a shared guestbook of pasted JDs."""
+
+    def __init__(self, ctx, env):
+        self.ctx = ctx
+        self.env = env
+
+    async def fetch(self, request):
+        method = str(getattr(request, "method", "GET")).upper()
+        if method == "GET":
+            blob = await self.ctx.storage.get("db")
+            exp = await self.ctx.storage.get("exp")
+            if blob is None:
+                return Response("", status=404)
+            if exp is not None and int(exp) < int(time.time()):
+                await self.ctx.storage.delete("db")
+                await self.ctx.storage.delete("exp")
+                return Response("", status=404)
+            return Response(blob)
+        if method == "PUT":
+            body = bytes(await request.bytes())
+            await self.ctx.storage.put("db", body)
+            await self.ctx.storage.put("exp", int(time.time()) + SESSION_TTL_SECONDS)
+            return Response("ok")
+        return Response("method not allowed", status=405)
+
+
+class Default(WorkerEntrypoint):
+    async def fetch(self, request):
+        apply_worker_llm_secret(self.env)
+        method = str(request.method).upper()
+        url = str(request.url)
+        headers = header_map(request)
+        body = b""
+        if method == "POST":
+            body = bytes(await request.bytes())
+        session_id = resolve_session_id(headers)
+        blob = await _load_blob(self.env, session_id)
+        status, resp_headers, resp_body, dumped = run_public_request(
+            method, url, body, headers, blob, session_id
+        )
+        await _save_blob(self.env, session_id, dumped)
+        path = urlparse(url).path or "/"
+        if (
+            status == 404
+            and path.startswith("/static/")
+            and getattr(self.env, "ASSETS", None) is not None
+        ):
+            rel = path[len("/static/") :]
+            return await self.env.ASSETS.fetch(f"https://assets.local/{rel}")
+        return Response(
+            resp_body,
+            status=status,
+            headers={name: value for name, value in resp_headers},
+        )
+
+
+async def _load_blob(env, session_id: str) -> bytes | None:
+    kv = getattr(env, "SESSIONS", None)
+    if kv is not None:
+        data = await kv.get(session_key(session_id), "arrayBuffer")
+        if data is None:
+            return None
+        return bytes(data)
+    stub = env.SESSION.get(env.SESSION.idFromName(session_id))
+    response = await stub.fetch(Request("https://session.local/blob"))
+    if int(response.status) == 404:
+        return None
+    return bytes(await response.bytes())
+
+
+async def _save_blob(env, session_id: str, blob: bytes) -> None:
+    kv = getattr(env, "SESSIONS", None)
+    if kv is not None:
+        await kv.put(session_key(session_id), blob, kv_options())
+        return
+    stub = env.SESSION.get(env.SESSION.idFromName(session_id))
+    await stub.fetch(Request("https://session.local/blob", method="PUT", body=blob))
