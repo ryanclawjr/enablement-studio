@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from html import escape
 from pathlib import Path
 from urllib.parse import urlencode
@@ -505,16 +506,40 @@ def _level_abbr(level: str) -> str:
     return "L3"
 
 
+def _edge_label_point(
+    start_x: float,
+    start_y: float,
+    end_x: float,
+    end_y: float,
+    width: float,
+    height: float,
+) -> tuple[float, float]:
+    dx = end_x - start_x
+    dy = end_y - start_y
+    length = math.hypot(dx, dy) or 1.0
+    nx = -dy / length
+    ny = dx / length
+    if ny > 0:
+        nx = -nx
+        ny = -ny
+    mid_x = (start_x + end_x) / 2 + nx * 16
+    mid_y = (start_y + end_y) / 2 + ny * 16
+    return (
+        min(max(mid_x, 18.0), width - 18.0),
+        min(max(mid_y, 14.0), height - 8.0),
+    )
+
+
 def _graph_figure(nodes: list[SkillNode], edges: list[SkillEdge]) -> str:
     if not nodes:
         return '<p class="empty-object">No skill nodes.</p>'
     cols = 3 if len(nodes) > 2 else max(1, len(nodes))
-    node_w = 170
-    node_h = 56
-    gap_x = 64
-    gap_y = 72
-    pad_x = 24
-    pad_y = 28
+    node_w = 252
+    node_h = 88
+    gap_x = 44
+    gap_y = 80
+    pad_x = 28
+    pad_y = 36
     positions: dict[str, tuple[float, float]] = {}
     for index, node in enumerate(nodes):
         row, col = divmod(index, cols)
@@ -526,7 +551,7 @@ def _graph_figure(nodes: list[SkillNode], edges: list[SkillEdge]) -> str:
     width = pad_x * 2 + cols * node_w + max(0, cols - 1) * gap_x
     height = pad_y * 2 + rows * node_h + max(0, rows - 1) * gap_y
     parts = [
-        f'<div class="graph-stage" data-graph="relations" style="width:{width}px;height:{height}px">',
+        f'<div class="graph-stage" data-graph="relations" style="width:{width}px;min-height:{height}px">',
         f'<svg class="graph-svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">',
         '<defs><marker id="graph-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">',
         '<path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#757575"/></marker></defs>',
@@ -545,11 +570,13 @@ def _graph_figure(nodes: list[SkillNode], edges: list[SkillEdge]) -> str:
             f'x2="{end_x:.1f}" y2="{end_y:.1f}" stroke="#757575" stroke-width="1.5" '
             'marker-end="url(#graph-arrow)" />'
         )
-        mid_x = (start_x + end_x) / 2
-        mid_y = (start_y + end_y) / 2 - 10
+        mid_x, mid_y = _edge_label_point(
+            start_x, start_y, end_x, end_y, width, height
+        )
         parts.append(
             f'<text class="graph-edge-label" x="{mid_x:.1f}" y="{mid_y:.1f}" '
             'text-anchor="middle" fill="#757575" font-size="11" '
+            'stroke="#1d1d25" stroke-width="4" paint-order="stroke" '
             f'font-family="Instrument Sans, ui-sans-serif, sans-serif">{_e(edge.relation)}</text>'
         )
     parts.append("</svg><ul class=\"graph-nodes\">")
@@ -557,7 +584,7 @@ def _graph_figure(nodes: list[SkillNode], edges: list[SkillEdge]) -> str:
         x, y = positions[node.id]
         parts.append(
             f'<li class="graph-node" data-node="{_e(node.id)}" '
-            f'style="left:{x:.0f}px;top:{y:.0f}px;width:{node_w}px;height:{node_h}px" '
+            f'style="left:{x:.0f}px;top:{y:.0f}px;width:{node_w}px;min-height:{node_h}px" '
             f'title="{_e(node.detail)}">'
             f'<span class="mono-caption">{_level_abbr(node.level)}</span>'
             f"<strong>{_e(node.name)}</strong>"
