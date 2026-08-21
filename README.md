@@ -66,7 +66,37 @@ enablement serve
 
 That binds **127.0.0.1:8765** (loopback only; pass `--host` / `--port` to change). `--host 0.0.0.0` prints a warning: stored job postings and transcripts would be on the LAN with no auth. Open http://127.0.0.1:8765.
 
-`/` is Role Source: one job document on a full-bleed `#16161d` table, with the path as six objects on the grid (Source, Graph, Objectives, Outline, Practice, Quiz). Type is local Instrument Sans. Run hover is a yellow glow, not a lift. `/role` is the same studio. Paste a job or SOP, Run, or Run Harborline (EXAMPLE DATA). Chrome is dark Tablework with a yellow accent. The walk is those six objects, not a dump of all five Role artifacts and not a three-door landing. One `generate()` still returns the whole Role module; the UI reveals it one step at a time. After Run, you land on Graph and the sheet shows that step. Opening `/` with no run is Source. Harborline is a muted text action on the sheet. **Run is offline** and returns a board without waiting on a network, even if `ENABLEMENT_LLM_API_KEY` is set. LLM is optional polish on the same `generate()` hook and must not freeze other tabs. Versions are dots in the sheet footer. Job family and EnablementFrame (enablement family only) are labeled on Graph. Invalid Role runs stop the walk on Graph in plain English. An empty Run stays on Source with that English validation. History is this project and product; two Role runs can be compared. Call and Critic are a quiet next line (no walkthrough yet). POSTs from a foreign Origin or Referer are rejected; curl and same-origin form posts still work. Run writes to the same `data/enablement.db` the CLI uses. There is no login and no cloud database.
+`/` is Role Source: one job document on a full-bleed `#16161d` table, with the path as six objects on the grid (Source, Graph, Objectives, Outline, Practice, Quiz). Type is local Instrument Sans. Run hover is a yellow glow, not a lift. `/role` is the same studio. Paste a job or SOP, Run, or Run Harborline (EXAMPLE DATA). Chrome is dark Tablework with a yellow accent. The walk is those six objects, not a dump of all five Role artifacts and not a three-door landing. One `generate()` still returns the whole Role module; the UI reveals it one step at a time. After Run, you land on Graph and the sheet shows that step. Opening `/` with no run is Source. Harborline is a muted text action on the sheet. **Run is offline** and returns a board without waiting on a network, even if `ENABLEMENT_LLM_API_KEY` is set. LLM is optional polish on the same `generate()` hook and must not freeze other tabs. Versions are dots in the sheet footer. Job family and EnablementFrame (enablement family only) are labeled on Graph. Invalid Role runs stop the walk on Graph in plain English. An empty Run stays on Source with that English validation. History is this project and product; two Role runs can be compared. Call and Critic are a quiet next line (no walkthrough yet). POSTs from a foreign Origin or Referer are rejected; curl and same-origin form posts still work. Run writes to the same `data/enablement.db` the CLI uses. There is no login. The public host (below) is a separate per-visitor store, not this file.
+
+## Public host
+
+Same Role Source, same `generate(..., force_offline=True)` as `enablement serve`. The loopback server is unchanged. Cloudflare Python Workers cannot run `http.server` / `threading`; both hosts call the pure handler in `src/enablement_studio/handler.py`.
+
+Public URL after the first deploy: **https://enablement-studio.pages.dev**. That Pages project already exists on Ryan's Cloudflare account (`enablement-studio`, production branch `main`). Do not create a second project. No custom domain.
+
+From a Cloudflare-authenticated Air (uv + Node). `--branch=main` is the production deploy:
+
+```bash
+uvx --from workers-py pywrangler pages deploy --project-name=enablement-studio --branch=main
+```
+
+After `pip install -e ".[cloudflare]"` (or `uv add --optional cloudflare`):
+
+```bash
+uv run pywrangler pages deploy --project-name=enablement-studio --branch=main
+```
+
+Do not run `pywrangler deploy` / `wrangler deploy` — those create a Worker and would be a second project. `pages deploy` publishes `generate()` + the Role Source HTML onto the existing Pages project.
+
+Public pastes are not a shared guestbook. Each visitor gets a session cookie. Their sqlite lives in a temp file for the request, then the bytes go to a Durable Object (KV-shaped key + TTL). Local Air still uses `data/enablement.db`.
+
+Optional LLM on the Worker is the secret `ENABLEMENT_LLM_API_KEY`:
+
+```bash
+npx wrangler pages secret put ENABLEMENT_LLM_API_KEY --project-name=enablement-studio
+```
+
+Do not set it for this cut. Do not put the key in `wrangler.toml`. Do not read `~/.enablement_llm.env`. Offline Run works with no secret.
 
 ## Sample data
 
@@ -86,8 +116,12 @@ src/enablement_studio/
   call/      # Call → Coach
   critic/    # Lesson critic
   prompts.py # Per-product LLM system prompts
-  serve.py   # Local UI (stdlib http.server)
+  handler.py # Pure HTTP handler (local + Worker)
+  serve.py   # Local UI (stdlib ThreadingHTTPServer)
   store/     # SQLite projects, runs, artifacts
+src/worker.py # Cloudflare Python Worker entry
+wrangler.toml           # existing Pages project enablement-studio
+public/static -> package fonts (Pages output)
 fixtures/    # Fictional demo inputs
 data/        # schema.sql; enablement.db created locally
 ```

@@ -22,6 +22,7 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+cloudflare = ["workers-py>=1.72.0"]
 
 [project.scripts]
 enablement = "enablement_studio.cli:main"

@@ -28,6 +28,7 @@ from enablement_studio.textutil import extract_title
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 TEMPLATE_PATH = TEMPLATE_DIR / "page.html"
 RECENT_LIMIT = 20
+LOCAL_STATUS_LINE = "this machine · 127.0.0.1 · offline"
 
 ROLE_STEPS = ("source", "graph", "objectives", "outline", "practice", "quiz")
 STEP_LABELS = {
@@ -104,6 +105,7 @@ def render_page(
     compare_run: SavedRun | None = None,
     step: str | None = None,
     notice: str | None = None,
+    status_line: str = LOCAL_STATUS_LINE,
 ) -> str:
     template = TEMPLATE_PATH.read_text(encoding="utf-8")
     resolved = resolve_role_step(step, run=run, output=output)
@@ -132,6 +134,7 @@ def render_page(
             "{{step_nav}}": "" if comparing else _step_nav(resolved, run, output),
             "{{version_dots}}": _version_dots(runs, run, product, project),
             "{{path_collection}}": _path_collection(resolved, run, output),
+            "{{status_line}}": _e(status_line),
         },
     )
 

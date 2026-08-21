@@ -113,7 +113,11 @@ def _assert_primary_object(body: str, present: str, *absent: str) -> None:
         assert f'class="{name} object"' not in body
 
 
-def _assert_source_table(body: str) -> None:
+def _assert_source_table(
+    body: str,
+    *,
+    status_line: str = "this machine · 127.0.0.1 · offline",
+) -> None:
     assert "Tablework" in body
     assert "<h1" in body
     h1_start = body.index("<h1")
@@ -129,8 +133,11 @@ def _assert_source_table(body: str) -> None:
     assert 'name="action" value="llm"' in body
     _assert_step_chrome(body, "source")
     assert 'class="door' not in body
-    assert body.count("this machine") == 1
-    assert "this machine · 127.0.0.1 · offline" in body
+    assert status_line in body
+    if status_line != "this machine · 127.0.0.1 · offline":
+        assert "this machine · 127.0.0.1 · offline" not in body
+    else:
+        assert body.count("this machine") == 1
     assert "Board is empty" not in body
     assert 'type="radio"' not in body
     assert "onboarding buddy" not in body.lower()
