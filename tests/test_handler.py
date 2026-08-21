@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import tomllib
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse
 
@@ -91,6 +92,25 @@ def test_public_handler_get_home_is_role_source(tmp_path: Path) -> None:
     assert "Get Lifetime Access" not in body
     assert "Sign in" not in body
     assert 'class="door' not in body
+
+
+def test_pages_index_is_role_source(tmp_path: Path) -> None:
+    store = Store(tmp_path / "public.db")
+    status, _headers, payload = handle(
+        "GET",
+        "/",
+        {},
+        b"",
+        {},
+        store=store,
+        csrf=public_csrf("enablement-studio.pages.dev"),
+        status_line=PUBLIC_STATUS_LINE,
+    )
+    index = REPO / "public" / "index.html"
+    assert status == 200
+    assert index.is_file()
+    assert index.read_bytes() == payload
+    _assert_source_table(payload.decode("utf-8"), status_line=PUBLIC_STATUS_LINE)
 
 
 def test_public_handler_serves_instrument_sans(tmp_path: Path) -> None:
@@ -249,6 +269,62 @@ def test_apply_worker_llm_secret_uses_env_only(
     assert os.environ[LLM_SECRET_NAME] == "worker-secret"
 
 
+# wrangler 4.85.0 validatePagesConfig supported keys (workers-sdk).
+_PAGES_WRANGLER_FIELDS = {
+    "ai",
+    "analytics_engine_datasets",
+    "browser",
+    "compatibility_date",
+    "compatibility_flags",
+    "d1_databases",
+    "dev",
+    "durable_objects",
+    "hyperdrive",
+    "kv_namespaces",
+    "limits",
+    "mtls_certificates",
+    "name",
+    "no_bundle",
+    "pages_build_output_dir",
+    "placement",
+    "queues",
+    "r2_buckets",
+    "send_metrics",
+    "services",
+    "upload_source_maps",
+    "vars",
+    "vectorize",
+    "version_metadata",
+}
+
+
+def test_pages_assets_binding_is_not_reserved_name() -> None:
+    wrangler_text = (REPO / "wrangler.toml").read_text(encoding="utf-8")
+    wrangler = tomllib.loads(wrangler_text)
+    worker = (REPO / "src/worker.py").read_text(encoding="utf-8")
+    assets = wrangler.get("assets")
+    if assets is not None:
+        assert str(assets.get("binding", "")).upper() != "ASSETS"
+    assert 'binding = "ASSETS"' not in wrangler_text
+    assert 'getattr(self.env, "ASSETS"' not in worker
+    assert "self.env.ASSETS" not in worker
+
+
+def test_pages_wrangler_config_is_legal() -> None:
+    wrangler = tomllib.loads((REPO / "wrangler.toml").read_text(encoding="utf-8"))
+    unknown = set(wrangler) - _PAGES_WRANGLER_FIELDS
+    assert unknown == set()
+    assert wrangler["name"] == "enablement-studio"
+    assert wrangler["pages_build_output_dir"] == "./public"
+    assert "main" not in wrangler
+    assert "assets" not in wrangler
+    assert "migrations" not in wrangler
+    assert "rules" not in wrangler
+    assert "[vars]" not in (REPO / "wrangler.toml").read_text(encoding="utf-8")
+    for binding in wrangler.get("durable_objects", {}).get("bindings", []):
+        assert binding.get("script_name")
+
+
 def test_worker_entry_and_wrangler_are_public_host_shape() -> None:
     worker = (REPO / "src/worker.py").read_text(encoding="utf-8")
     wrangler = (REPO / "wrangler.toml").read_text(encoding="utf-8")
@@ -260,7 +336,7 @@ def test_worker_entry_and_wrangler_are_public_host_shape() -> None:
     assert "class Default(WorkerEntrypoint)" in worker
     assert "enablement-studio" in wrangler
     assert 'compatibility_flags = ["python_workers"]' in wrangler
-    assert "main = " in wrangler and "src/worker.py" in wrangler
+    assert "src/worker.py" in wrangler
     assert 'pages_build_output_dir = "./public"' in wrangler
     assert "--project-name=enablement-studio" in wrangler
     assert "--branch=main" in wrangler

@@ -86,7 +86,7 @@ After `pip install -e ".[cloudflare]"` (or `uv add --optional cloudflare`):
 uv run pywrangler pages deploy --project-name=enablement-studio --branch=main
 ```
 
-Do not run `pywrangler deploy` / `wrangler deploy` — those create a Worker and would be a second project. `pages deploy` publishes `generate()` + the Role Source HTML onto the existing Pages project.
+Do not run `pywrangler deploy` / `wrangler deploy` — those create a Worker and would be a second project. `pages deploy` publishes onto the existing Pages project. wrangler 4.85.0 rejects a Pages config that sets `main`, `[assets]`, `[[migrations]]`, or a Durable Object without `script_name`, and it reserves the binding name `ASSETS`.
 
 Public pastes are not a shared guestbook. Each visitor gets a session cookie. Their sqlite lives in a temp file for the request, then the bytes go to a Durable Object (KV-shaped key + TTL). Local Air still uses `data/enablement.db`.
 
@@ -121,6 +121,7 @@ src/enablement_studio/
   store/     # SQLite projects, runs, artifacts
 src/worker.py # Cloudflare Python Worker entry
 wrangler.toml           # existing Pages project enablement-studio
+public/index.html       # Role Source snapshot for Pages GET /
 public/static -> package fonts (Pages output)
 fixtures/    # Fictional demo inputs
 data/        # schema.sql; enablement.db created locally

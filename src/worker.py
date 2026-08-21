@@ -63,13 +63,10 @@ class Default(WorkerEntrypoint):
         )
         await _save_blob(self.env, session_id, dumped)
         path = urlparse(url).path or "/"
-        if (
-            status == 404
-            and path.startswith("/static/")
-            and getattr(self.env, "ASSETS", None) is not None
-        ):
+        static = getattr(self.env, "STATIC", None)
+        if status == 404 and path.startswith("/static/") and static is not None:
             rel = path[len("/static/") :]
-            return await self.env.ASSETS.fetch(f"https://assets.local/{rel}")
+            return await static.fetch(f"https://assets.local/{rel}")
         return Response(
             resp_body,
             status=status,
