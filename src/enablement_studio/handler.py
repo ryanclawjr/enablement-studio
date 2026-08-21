@@ -181,6 +181,7 @@ def _get_studio(
         step=step,
         notice=notice,
         status_line=status_line,
+        public=status_line == PUBLIC_STATUS_LINE,
     )
     return _html(200, page)
 
@@ -304,6 +305,7 @@ def _studio_error(
         error=message,
         step="source",
         status_line=status_line,
+        public=status_line == PUBLIC_STATUS_LINE,
     )
     return _html(status, page)
 

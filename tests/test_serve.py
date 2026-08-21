@@ -81,6 +81,26 @@ def _http(
         conn.close()
 
 
+FAKE_AE_OBJECT_COPY = (
+    "explain interchange",
+    "map authorization",
+    "settle in plain language",
+    "$2.40",
+    "Owner asks why a $2.40 fee landed",
+    "0:00 · frame",
+    "8:00 · rails",
+    "18:00 · practice",
+    "Skills from the work",
+)
+
+PUBLIC_ENGINEER_CHROME = (
+    "public · offline",
+    "LLM (no key)",
+    "engine offline",
+    "project default",
+)
+
+
 def _assert_step_chrome(body: str, step: str) -> None:
     assert f'data-step="{step}"' in body
     assert 'aria-label="Role path"' in body
@@ -92,8 +112,9 @@ def _assert_step_chrome(body: str, step: str) -> None:
     assert "Quiz" in body
     assert 'aria-current="step"' in body
     assert 'type="radio"' not in body
-    assert "path-card" in body
-    assert body.count("path-card") >= 6
+    assert "object-cell" in body
+    assert body.count("object-cell") >= 6
+    assert "path-card" not in body
     current_at = body.index('aria-current="step"')
     current_chunk = body[max(0, current_at - 80) : current_at + 280]
     labels = {
@@ -107,6 +128,44 @@ def _assert_step_chrome(body: str, step: str) -> None:
     assert labels[step] in current_chunk
 
 
+def _assert_no_fake_ae_object_copy(body: str) -> None:
+    lowered = body.lower()
+    for snippet in FAKE_AE_OBJECT_COPY:
+        assert snippet.lower() not in lowered
+
+
+def _assert_no_public_engineer_chrome(body: str) -> None:
+    for snippet in PUBLIC_ENGINEER_CHROME:
+        assert snippet not in body
+    assert 'name="action" value="llm"' not in body
+
+
+def _assert_object_cells_link_this_run(body: str, run_id: int) -> None:
+    for step in (
+        "source",
+        "graph",
+        "objectives",
+        "outline",
+        "practice",
+        "quiz",
+    ):
+        assert f"run={run_id}" in body
+        assert f"step={step}" in body
+    assert body.count('class="object-cell') >= 6
+    assert 'href="' in body
+    assert f"?run={run_id}" in body or f"run={run_id}&amp;step=" in body
+
+
+def _assert_graph_relationships(body: str) -> None:
+    assert 'class="skill-graph' in body
+    assert "graph-node" in body
+    assert "graph-edge" in body
+    assert "<svg" in body
+    assert 'type="checkbox"' not in body
+    assert "graph-list" not in body
+    assert "graph-node-row" not in body
+
+
 def _assert_primary_object(body: str, present: str, *absent: str) -> None:
     assert f'class="{present}' in body
     for name in absent:
@@ -116,7 +175,7 @@ def _assert_primary_object(body: str, present: str, *absent: str) -> None:
 def _assert_source_table(
     body: str,
     *,
-    status_line: str = "this machine · 127.0.0.1 · offline",
+    public: bool = False,
 ) -> None:
     assert "Tablework" in body
     assert "<h1" in body
@@ -126,42 +185,41 @@ def _assert_source_table(
     assert "Enablement Studio" not in h1
     assert "<textarea" in body
     assert 'name="text"' in body
-    assert "Run Harborline" in body
+    assert "Harborline" in body
     assert "EXAMPLE DATA" in body
     assert 'name="project"' in body
     assert 'name="action" value="run"' in body
-    assert 'name="action" value="llm"' in body
+    assert 'name="action" value="demo"' in body
+    assert 'class="text-action"' not in body
     _assert_step_chrome(body, "source")
+    _assert_no_fake_ae_object_copy(body)
     assert 'class="door' not in body
-    assert status_line in body
-    if status_line != "this machine · 127.0.0.1 · offline":
+    if public:
+        _assert_no_public_engineer_chrome(body)
         assert "this machine · 127.0.0.1 · offline" not in body
+        assert 'class="status-pill"' not in body
     else:
+        assert "this machine · 127.0.0.1 · offline" in body
+        assert 'name="action" value="llm"' in body
+        assert "LLM (no key)" not in body
+        assert "engine offline" not in body
+        assert "project default" not in body
         assert body.count("this machine") == 1
     assert "Board is empty" not in body
     assert 'type="radio"' not in body
     assert "onboarding buddy" not in body.lower()
     assert "job → skill graph → 30-minute module" not in body
     assert 'class="outline object"' not in body
-    assert "SOURCE" in body
-    assert "Paste a job" in body
-    assert "Skills from the work" in body
-    assert 'class="collection"' in body
+    assert "Paste a job or SOP" in body
+    assert 'class="object-table"' in body
     assert "version-dots" in body
-    assert "document-sheet" in body
+    assert "object-sheet" in body
+    assert "position: fixed" not in body
     assert "#16161d" in body
     assert "#1d1d25" in body
     assert "#ffe52f" in body
     assert "#f6f6f6" in body
     assert "#757575" in body
-    assert "#191a1d" in body
-    assert "rgba(236, 236, 236, 0.08)" in body
-    assert "rgba(109, 112, 130, 0.21)" in body
-    assert "rgba(132, 132, 132, 0.25)" in body
-    assert "0 20px 50px rgba(255, 242, 80, 0.34)" in body
-    assert "400ms ease" in body
-    assert "80px 80px" in body
-    assert "gap: 16px" in body
     assert "Instrument Sans" in body
     assert "/static/fonts/instrument-sans-latin-400-normal.woff" in body
     assert "translateY(-2px)" not in body
@@ -273,7 +331,6 @@ def test_post_role_harborline_lands_on_graph(server, job_text: str) -> None:
     assert status == 200
     _assert_step_chrome(body, "graph")
     assert "Account Executive" in body
-    assert "offline" in body
     assert "EXAMPLE DATA" in body
     store = Store(default_db_path())
     runs = store.list_runs()
@@ -284,6 +341,7 @@ def test_post_role_harborline_lands_on_graph(server, job_text: str) -> None:
     assert "Harborline Payments" in body
     assert "weekend cash-flow" in body
     assert 'data-family="seller"' in body
+    _assert_graph_relationships(body)
     _assert_primary_object(body, "skill-graph", "outline", "practice", "quiz")
     assert "Invalid module" not in body
     assert f"run={runs[0].id}" in body
@@ -325,7 +383,7 @@ def test_run_with_slow_llm_env_returns_offline_board(
     assert status == 200
     _assert_step_chrome(body, "graph")
     assert "Account Executive" in body
-    assert "engine offline" in body
+    assert "engine offline" not in body
     _assert_primary_object(body, "skill-graph", "outline", "practice", "quiz")
     get_started = time.monotonic()
     get_status, home, _location = _http(server, "GET", "/")
@@ -380,7 +438,7 @@ def test_in_flight_llm_does_not_block_get(
     post_status, post_body, _post_location = posted_result
     assert post_status == 200
     _assert_step_chrome(post_body, "graph")
-    assert "engine offline" in post_body
+    assert "engine offline" not in post_body
 
 
 def test_harborline_demo_redirects_to_graph_step(server) -> None:
@@ -397,7 +455,8 @@ def test_harborline_demo_redirects_to_graph_step(server) -> None:
     assert "Account Executive" in body
     assert "Harborline Payments" in body
     assert "EXAMPLE DATA" in body
-    assert "engine offline" in body
+    assert "engine offline" not in body
+    _assert_graph_relationships(body)
     _assert_primary_object(body, "skill-graph", "outline", "practice", "quiz")
     assert 'type="radio"' not in body
     store = Store(default_db_path())
@@ -436,7 +495,58 @@ def test_continue_links_walk_role_steps(server) -> None:
 
 def test_resolve_role_step_defaults() -> None:
     assert resolve_role_step(None, run=None, output=None) == "source"
-    assert resolve_role_step("quiz", run=None, output=None) == "source"
+    assert resolve_role_step("quiz", run=None, output=None) == "quiz"
+    assert resolve_role_step("nope", run=None, output=None) == "source"
+
+
+def test_empty_source_objects_have_no_other_job_copy(server) -> None:
+    status, body, _location = _http(server, "GET", "/")
+    assert status == 200
+    _assert_source_table(body)
+    _assert_no_fake_ae_object_copy(body)
+    assert "interchange" not in body.lower()
+    assert "$2.40" not in body
+    assert 'class="objectives object"' not in body
+    assert 'class="outline object"' not in body
+    assert 'class="practice object"' not in body
+    assert 'class="quiz object"' not in body
+
+
+def test_empty_future_step_is_an_empty_object(server) -> None:
+    status, body, _location = _http(server, "GET", "/role?step=graph")
+    assert status == 200
+    _assert_step_chrome(body, "graph")
+    _assert_no_fake_ae_object_copy(body)
+    assert "Harborline Payments" not in body
+    assert "interchange" not in body.lower()
+    assert 'class="graph-node"' not in body
+    assert "<textarea" not in body
+
+
+def test_harborline_object_cells_are_run_step_links(server) -> None:
+    posted = urlencode(
+        {"product": "role", "text": "", "project": "default", "action": "demo"}
+    )
+    status, _body, location = _http(server, "POST", "/role", body=posted, follow=False)
+    assert status == 303
+    assert location is not None
+    assert "run=" in location
+    assert "step=graph" in location
+    status, body, _followed = _http(server, "GET", location)
+    assert status == 200
+    run = Store(default_db_path()).list_runs()[0]
+    _assert_step_chrome(body, "graph")
+    _assert_object_cells_link_this_run(body, run.id)
+    _assert_graph_relationships(body)
+    for step in ("graph", "objectives", "outline", "practice", "quiz"):
+        status, page, _location = _http(
+            server, "GET", f"/role?run={run.id}&step={step}"
+        )
+        assert status == 200
+        _assert_step_chrome(page, step)
+        _assert_object_cells_link_this_run(page, run.id)
+        if step == "graph":
+            _assert_graph_relationships(page)
 
 
 def test_serve_help_exists(capsys) -> None:

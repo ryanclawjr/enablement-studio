@@ -22,7 +22,14 @@ from enablement_studio.session import (
 )
 from enablement_studio.worker_bridge import JsCopiedBytes, blob_headers, js_copy_bytes
 
-from test_serve import _assert_primary_object, _assert_source_table, _assert_step_chrome
+from test_serve import (
+    _assert_graph_relationships,
+    _assert_no_public_engineer_chrome,
+    _assert_object_cells_link_this_run,
+    _assert_primary_object,
+    _assert_source_table,
+    _assert_step_chrome,
+)
 
 _TEXT_PLAIN = "text/plain;charset=UTF-8"
 
@@ -285,7 +292,7 @@ def test_graph_after_harborline_does_not_pass_memoryview_into_response() -> None
         source_app.fetch(FakeRequest(f"{PUBLIC_ORIGIN}/", headers={"host": PUBLIC_HOST}))
     )
     assert source.status == 200
-    _assert_source_table(_text(source), status_line=PUBLIC_STATUS_LINE)
+    _assert_source_table(_text(source), public=True)
 
     app, storage = _make_app()
     sid = new_session_id()
@@ -339,10 +346,11 @@ def test_graph_after_harborline_does_not_pass_memoryview_into_response() -> None
     assert not isinstance(graph.body, memoryview)
     body = _text(graph)
     _assert_step_chrome(body, "graph")
-    assert "path-card" in body
     assert "Harborline Payments" in body
     assert "EXAMPLE DATA" in body
-    assert "engine offline" in body
+    _assert_no_public_engineer_chrome(body)
+    _assert_graph_relationships(body)
+    _assert_object_cells_link_this_run(body, 1)
     _assert_primary_object(body, "skill-graph", "outline", "practice", "quiz")
 
     for step, present, absent in (

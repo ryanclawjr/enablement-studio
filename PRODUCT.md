@@ -101,13 +101,21 @@ A scavenger-hunt activity against "explain interchange" fails alignment. Same ve
 
 Tablework is the product name. The repo and package stay enablement-studio.
 
-`enablement serve` is a loopback page over the same `generate()` entry and SQLite store. Default bind is 127.0.0.1:8765. No auth. No public site. Offline is the product.
+`enablement serve` is a loopback page over the same `generate()` entry and SQLite store. Default bind is 127.0.0.1:8765. No auth. Offline is the product.
 
-GET `/` is Role Source. Home is one job document on a full-bleed dark table. Tokens come from the live microinteractions.co CSS: canvas `--black-brand` `#16161d`, cards `--black-2` `#1d1d25`, accent `--yellow-brand` `#ffe52f` on `#000`, ink `--white-brand` `#f6f6f6`, muted `--slate-grey` `#757575`, hairline `rgba(236,236,236,0.08)` or `rgba(109,112,130,0.21)`. Elevation is hairline only. The grid is CSS 1px lines, about 80px, stroke `#848484` at 0.25 opacity. No BGG.svg beam and no `<canvas>`. The sheet is centered, about 820px, radius 12–16px. Quiet SOURCE kicker, a 16px/24px textarea, yellow Run, ghost LLM, Harborline as muted text. Versions are small dots in the sheet footer. The Role path is six object cards on a 6-column grid with 16px gap: Source, Graph, Objectives, Outline, Practice, Quiz. Current step is one yellow marker (a dot), not a wash. Clicking a card uses the same `?run=` / `?step=` query as today's path. No second row of pills under the wordmark. No two-column studio and versions rail. Chrome stays tight: Tablework, one status pill (`this machine · 127.0.0.1 · offline`), and `Call Next · Critic Next`. Yellow is spent: Run and the current-object marker. Run hover is a yellow glow bloom (`0 20px 50px rgba(255,242,80,.34)` over 400ms), not translateY. Fonts are local Instrument Sans 400/500, stack `Instrument Sans, ui-sans-serif, sans-serif`. Not fonts.googleapis.com. Wordmark says Tablework, not Enablement Studio. Do not ship beige/stone/steel. Do not ship a hero, spotlight, pricing, or three equal-weight product cards.
+GET `/` is Role Source. The page is a table of six objects: Source, Graph, Objectives, Outline, Practice, Quiz. Those objects are the product. They are not a decorative dock under a form, and they are not a second product.
+
+Empty Source: paste is the work. Harborline is a first-class action, equal to Run, labeled EXAMPLE DATA. Future objects exist as names, or as true empty sheets. They never show another job's content. Local chrome may say `this machine · 127.0.0.1 · offline`. Local LLM is a separate action on the same `generate()` hook. Do not put LLM, key status, or an offline/public pill on the public host.
+
+After a successful Run, redirect to Graph. The six objects are clickable. The current object is yellow. Clicking uses `?run=` / `?step=`. Each object shows this run's content, or empty if that step has none. Invalid Role stops the walk on Graph with reasons. Do not parade a fake Outline or Quiz.
+
+Graph is relationships: nodes and edges you can see. Not a vertical checklist. Not chips only. Family and EnablementFrame stay quiet meta.
+
+The object row and the current sheet share one table. Nothing is `position: fixed` against the other. They must not overlap or clip at 1280×800 or 1024×588. Yellow is the primary action and the current object. Motion is Run → Graph reveal and the current-object marker. Dark canvas, yellow accent, pills, local Instrument Sans 400/500 (`Instrument Sans, ui-sans-serif, sans-serif`). Not fonts.googleapis.com. Wordmark says Tablework. Do not ship beige, a hero, a lobby, or three-door chrome.
 
 GET `/role` is the same studio (same handler, or 302 to `/` with the same query). Old `/?product=role` stays on `/`. `/?product=call|critic` is a quiet next note under chrome; it must not replace the table with a splash. `/call` and `/critic` do the same.
 
-One `generate()` still returns all five Role objects; the UI reveals them one step at a time: Source, Graph, Objectives, Outline, Practice, Quiz. Opening `/` with no run is Source. After a successful Run, redirect to Graph. Opening `/?run=N` or `/role?run=N` without a step is Graph. Step state is `?step=source|graph|objectives|outline|practice|quiz` plus `?run=` after generate. After Run, the sheet shows that step's object. Graph shows skill chips, labeled adjacency, and Family/Frame as quiet meta. Invalid Role stops the walk on Graph with "Invalid module" and reasons. Do not parade a successful Outline or Quiz. Do not dump all five objects on one page.
+One `generate()` still returns all five Role objects; the UI reveals them one step at a time. Opening `/` with no run is Source. Opening `/?run=N` or `/role?run=N` without a step is Graph. Step state is `?step=source|graph|objectives|outline|practice|quiz` plus `?run=` after generate.
 
 Studio Run is offline-first: it calls `generate(..., force_offline=True)` and must return a board without waiting on OpenAI. The optional LLM hook is the same one the CLI uses. It is a separate LLM action, never the thing that holds Run. A single-threaded `HTTPServer` that blocks GETs while urllib talks to a model is not acceptable; other tabs must stay readable while an LLM call is in flight. If `generate()` does call the LLM (CLI or LLM action), the urllib timeout must actually bound that call.
 
@@ -119,17 +127,17 @@ History is this project and product. Two Role runs in the same project can be co
 
 ## Public host
 
-Ryan authorized shipping Tablework as a premier public product. Anyone can paste a JD or messy SOP and walk Role Source → Quiz without cloning or `enablement serve`.
+Anyone can paste a JD or messy SOP and walk Role Source → Quiz without cloning or `enablement serve`.
 
-The public app is the same `generate()` and the same Role Source HTML as loopback. Request handling lives in `src/enablement_studio/handler.py`: `(method, path, query, body, headers) → (status, headers, body)`. Local `ThreadingHTTPServer` and the Cloudflare Worker `fetch()` both call it.
+The public app is the same `generate()` and the same Role table as loopback, minus local-only chrome. Request handling lives in `src/enablement_studio/handler.py`: `(method, path, query, body, headers) → (status, headers, body)`. Local `ThreadingHTTPServer` and the Cloudflare Worker `fetch()` both call it.
 
 - Worker: `src/worker.py`, `from workers import WorkerEntrypoint, Response`. `wrangler.toml` name `enablement-studio`, `main = src/worker.py`, `compatibility_flags = ["python_workers"]`. Assets directory `./public`, binding `STATIC` (not `ASSETS`), `run_worker_first`. SessionVault is a same-script Durable Object. Do not put `pages_build_output_dir` back. wrangler 4.85.0 Pages config rejects `main`, `[assets]`, `[[migrations]]`, `[[rules]]`, and a Durable Object without `script_name`.
-- One project named `enablement-studio`. Prefer `https://enablement-studio.pages.dev` if that hostname still points at this project after convert. Do not create a second project or `enablement-studio-worker`. No custom domain. Air command: `uvx --from workers-py pywrangler deploy`.
+- One project named `enablement-studio`. Prefer `https://enablement-studio.pages.dev` if that hostname still points at this project after convert. Live URL: https://enablement-studio.ryanclawiii.workers.dev. Do not create a second project or `enablement-studio-worker`. No custom domain. Air command: `uvx --from workers-py pywrangler deploy`.
 - Public store is not a global D1 table. Each visitor gets a random session cookie. Their runs live in an ephemeral sqlite file for the request, then the file bytes go to a Durable Object keyed by that cookie (KV-shaped: one key, short TTL). Isolate memory dies between requests; a shared guestbook would leak pastes. Harborline POST can finish `generate()` even if the vault is missing; the walk after Graph needs the store.
 - Local Air store stays file SQLite at `data/enablement.db`.
 - Worker GET `/` is the live handler HTML. `public/index.html` is a snapshot fallback. Fonts are package files plus the STATIC binding.
-- LLM key is the Worker secret `ENABLEMENT_LLM_API_KEY`. Do not put it in the repo, in chat, or in `wrangler.toml`. Do not read `~/.enablement_llm.env`. Studio Run is `force_offline=True` and works with no secret.
-- GET `/` is Role Source (PR 14 composition). No lobby, no three-door, no marketing hero, no Get Lifetime Access, no Sign in, no Next.js, no React, no FastAPI, no SaaS LMS.
+- LLM key is the Worker secret `ENABLEMENT_LLM_API_KEY`. Do not put it in the repo, in chat, or in `wrangler.toml`. Do not read `~/.enablement_llm.env`. Studio Run is `force_offline=True` and works with no secret. Public HTML has no LLM control and no status pill about offline or keys.
+- GET `/` is Role Source as a table of objects. No lobby, no three-door, no marketing hero, no Get Lifetime Access, no Sign in, no Next.js, no React, no FastAPI, no SaaS LMS. No `public · offline`, `LLM (no key)`, `engine offline`, or `project default` badge.
 
 ## Out of scope
 

@@ -81,13 +81,11 @@ def resolve_role_step(
     run: SavedRun | None,
     output: ProductOutput | None,
 ) -> str:
-    has_module = isinstance(output, RoleEnablement)
-    if not has_module:
-        return "source"
     requested = (step or "").strip().lower()
+    has_module = isinstance(output, RoleEnablement)
     if requested not in ROLE_STEPS:
-        requested = "graph"
-    if output.invalid and requested not in {"source", "graph"}:
+        return "graph" if has_module else "source"
+    if has_module and output.invalid and requested not in {"source", "graph"}:
         return "graph"
     return requested
 
@@ -106,6 +104,7 @@ def render_page(
     step: str | None = None,
     notice: str | None = None,
     status_line: str = LOCAL_STATUS_LINE,
+    public: bool = False,
 ) -> str:
     template = TEMPLATE_PATH.read_text(encoding="utf-8")
     resolved = resolve_role_step(step, run=run, output=output)
@@ -114,27 +113,30 @@ def render_page(
     body_class = f"product-role step-{resolved}"
     if comparing:
         body_class += " comparing"
+    if public:
+        body_class += " public"
     return _fill(
         template,
         {
             "{{page_title}}": _e(_page_title(resolved)),
             "{{body_class}}": _e(body_class),
             "{{project}}": _e(project),
-            "{{step_kicker}}": _e(_step_kicker(resolved)),
             "{{notice_block}}": _notice_block(notice),
             "{{error_block}}": _error_block(error),
             "{{step_board}}": (
                 ""
                 if comparing
-                else _step_board(resolved, text, project, output, run, has_key)
+                else _step_board(
+                    resolved, text, project, output, run, has_key, public=public
+                )
             ),
             "{{compare_block}}": _compare_block(
                 run, output, compare_run, compare_output
             ),
             "{{step_nav}}": "" if comparing else _step_nav(resolved, run, output),
             "{{version_dots}}": _version_dots(runs, run, product, project),
-            "{{path_collection}}": _path_collection(resolved, run, output),
-            "{{status_line}}": _e(status_line),
+            "{{object_row}}": _object_row(resolved, run, output),
+            "{{status_pill}}": _status_pill(status_line, public=public),
         },
     )
 
@@ -145,65 +147,61 @@ def _page_title(step: str) -> str:
     return f"Role · {STEP_LABELS[step]}"
 
 
-def _step_kicker(step: str) -> str:
-    return STEP_LABELS[step].upper()
+def _clip(text: str, limit: int) -> str:
+    compact = " ".join(text.split())
+    if len(compact) <= limit:
+        return compact
+    return compact[: limit - 1].rstrip() + "…"
 
 
-def _path_preview(name: str) -> str:
+def _status_pill(status_line: str, *, public: bool) -> str:
+    if public or not status_line.strip():
+        return ""
+    return f'<p class="status-pill">{_e(status_line)}</p>'
+
+
+def _object_brief(
+    name: str,
+    run: SavedRun | None,
+    output: ProductOutput | None,
+) -> str:
+    if not isinstance(output, RoleEnablement):
+        return ""
+    if output.invalid and name not in {"source", "graph"}:
+        return ""
     if name == "source":
-        return (
-            '<div class="path-preview source-preview">'
-            '<span class="mini-pill accent">Paste a job</span>'
-            '<span class="mini-pill ghost">Harborline</span>'
-            "</div>"
-        )
+        raw = ""
+        if run is not None and run.input_text.strip():
+            raw = run.input_text
+        elif output.role_title.strip():
+            raw = output.role_title
+        return _clip(raw, 42)
     if name == "graph":
-        return (
-            '<div class="path-preview graph-preview">'
-            '<span class="graph-bars" aria-hidden="true"><i></i><i></i><i></i></span>'
-            "<p>Skills from the work</p>"
-            "</div>"
-        )
+        count = len(output.skill_graph.nodes)
+        return f"{count} skills" if count else ""
     if name == "objectives":
-        return (
-            '<ol class="path-preview obj-preview">'
-            "<li>1· explain interchange</li>"
-            "<li>2· map authorization</li>"
-            "<li>3· settle in plain language</li>"
-            "</ol>"
-        )
+        if not output.objectives:
+            return ""
+        return _clip(output.objectives[0].statement, 42)
     if name == "outline":
-        return (
-            '<ol class="path-preview outline-preview">'
-            "<li>0:00 · frame</li>"
-            "<li>8:00 · rails</li>"
-            "<li>18:00 · practice</li>"
-            "</ol>"
-        )
+        if not output.outline:
+            return ""
+        block = output.outline[0]
+        return _clip(f"{block.minutes} · {block.title}", 42)
     if name == "practice":
-        return (
-            '<div class="path-preview practice-preview">'
-            '<span class="mini-pill ghost">Scenario</span>'
-            "<p>Owner asks why a $2.40 fee landed.</p>"
-            "</div>"
-        )
+        if not output.practice.scenario.strip():
+            return ""
+        return _clip(output.practice.scenario, 42)
     if name == "quiz":
-        return (
-            '<div class="path-preview quiz-preview" aria-hidden="true">'
-            '<span class="quiz-choice">A</span>'
-            '<span class="quiz-choice">B</span>'
-            '<span class="quiz-choice on">C</span>'
-            "</div>"
-        )
+        count = len(output.quiz)
+        return f"{count} items" if count else ""
     never: str = name
     raise ValueError(f"unsupported Role step: {never}")
 
 
-def _path_collection(
-    step: str, run: SavedRun | None, _output: ProductOutput | None
-) -> str:
+def _object_row(step: str, run: SavedRun | None, output: ProductOutput | None) -> str:
     current_idx = ROLE_STEPS.index(step)
-    items: list[str] = []
+    cells: list[str] = []
     for index, name in enumerate(ROLE_STEPS):
         label = STEP_LABELS[name]
         if index == current_idx:
@@ -213,26 +211,28 @@ def _path_collection(
         else:
             state = "future"
         current_attr = ' aria-current="step"' if state == "current" else ""
-        inner = (
-            f'<span class="path-card-head">'
-            f"<strong>{_e(label)}</strong>"
-            '<span class="path-card-dot" aria-hidden="true"></span>'
-            "</span>"
-            f"{_path_preview(name)}"
+        brief = _object_brief(name, run, output)
+        brief_html = (
+            f'<span class="object-brief">{_e(brief)}</span>' if brief else ""
         )
-        if run is not None:
-            href = _e(role_path(run.id, name))
-            items.append(
-                f'<a class="path-card {state}" href="{href}"{current_attr}>{inner}</a>'
-            )
-            continue
-        items.append(f'<div class="path-card {state}"{current_attr}>{inner}</div>')
-    return f'<nav class="collection" aria-label="Role path">{"".join(items)}</nav>'
+        inner = f'<span class="object-name">{_e(label)}</span>{brief_html}'
+        href = _e(role_path(None if run is None else run.id, name))
+        cells.append(
+            f'<th scope="col">'
+            f'<a class="object-cell {state}" href="{href}"{current_attr}>{inner}</a>'
+            "</th>"
+        )
+    return f"<tr>{''.join(cells)}</tr>"
 
 
-def _source_form(text: str, project: str, has_key: bool) -> str:
-    llm_disabled = "" if has_key else " disabled"
-    llm_caption = "" if has_key else ' <span class="no-key-caption">(no key)</span>'
+def _source_form(text: str, project: str, has_key: bool, *, public: bool) -> str:
+    llm = ""
+    if not public:
+        llm_disabled = "" if has_key else " disabled"
+        llm = (
+            f'<button class="llm" type="submit" name="action" value="llm"'
+            f"{llm_disabled}>LLM</button>"
+        )
     return (
         '<form method="post" action="/" class="role-form">'
         '<input type="hidden" name="product" value="role">'
@@ -241,13 +241,31 @@ def _source_form(text: str, project: str, has_key: bool) -> str:
         f'placeholder="Paste a job or SOP...">{_e(text)}</textarea>'
         '<div class="actions">'
         '<button class="run" type="submit" name="action" value="run">Run</button>'
-        f'<button class="llm" type="submit" name="action" value="llm"{llm_disabled}>LLM{llm_caption}</button>'
+        '<button class="example" type="submit" name="action" value="demo">'
+        'Harborline <span class="example-tag">EXAMPLE DATA</span></button>'
+        f"{llm}"
         "</div>"
-        '<p class="harborline">'
-        '<button class="text-action" type="submit" name="action" value="demo">Run Harborline</button>'
-        " · EXAMPLE DATA"
-        "</p>"
         "</form>"
+    )
+
+
+def _object_class(step: str) -> str:
+    if step == "graph":
+        return "skill-graph"
+    if step in ROLE_STEPS:
+        return step
+    never: str = step
+    raise ValueError(f"unsupported Role step: {never}")
+
+
+def _empty_object(step: str) -> str:
+    label = STEP_LABELS[step]
+    return (
+        f'<div class="step-view" data-step="{_e(step)}">'
+        f'<section class="{_object_class(step)} object is-empty">'
+        f"<h3>{_e(label)}</h3>"
+        "</section>"
+        "</div>"
     )
 
 
@@ -258,19 +276,17 @@ def _step_board(
     output: ProductOutput | None,
     run: SavedRun | None,
     has_key: bool,
+    *,
+    public: bool,
 ) -> str:
     if step == "source":
         return (
             f'<div class="step-view" data-step="source">'
-            f"{_source_form(text, project, has_key)}"
+            f"{_source_form(text, project, has_key, public=public)}"
             "</div>"
         )
     if not isinstance(output, RoleEnablement):
-        return (
-            f'<div class="step-view" data-step="source">'
-            f"{_source_form(text, project, has_key)}"
-            "</div>"
-        )
+        return _empty_object(step)
     inner = _role_step_inner(step, output, run, text)
     return f'<div class="step-view" data-step="{_e(step)}">{inner}</div>'
 
@@ -379,10 +395,6 @@ def _role_meta_header(
     source_text = _role_source(run, source, output)
     family, frame = _role_diagnosis(output, source_text)
     banner_text = source_banner(output)
-    version_str = f"v{run.version}" if run is not None else "v1"
-    engine_str = run.engine.value if run is not None else "offline"
-    run_id_str = f"run {run.id} · " if run is not None else ""
-    project_str = f"project {run.project} · " if run is not None else ""
     meta_chips = [
         f'<span class="meta-chip"><span class="meta-chip-label">Family</span> '
         f'<strong data-family="{_e(family.value)}">{_e(family.value)}</strong></span>'
@@ -393,10 +405,6 @@ def _role_meta_header(
             f'<span class="meta-chip"><span class="meta-chip-label">Frame</span> '
             f'<strong data-frame="{_e(frame.value)}">{_e(frame.value)}</strong> — {_e(voice)}</span>'
         )
-    meta_chips.append(
-        f'<span class="meta-chip">{_e(run_id_str)}{_e(project_str)}'
-        f"{_e(version_str)} · engine {_e(engine_str)}</span>"
-    )
     return (
         '<header class="module-header">'
         f"<h2>{_e(heading)}</h2>"
@@ -497,103 +505,73 @@ def _level_abbr(level: str) -> str:
     return "L3"
 
 
-def _generate_inline_svg_graph(nodes: list[SkillNode], edges: list[SkillEdge]) -> str:
+def _graph_figure(nodes: list[SkillNode], edges: list[SkillEdge]) -> str:
     if not nodes:
-        return ""
-    count = len(nodes)
-    node_width = 130
-    node_height = 36
-    gap = 40
-    total_width = count * node_width + (count - 1) * gap + 40
-    total_height = 80
-    edge_label_map: dict[str, str] = {}
-    for edge in edges:
-        edge_label_map[edge.source] = edge.relation
-    svg_parts = [
-        '<div class="graph-svg-wrap">',
-        f'<svg class="graph-svg" viewBox="0 0 {total_width} {total_height}" width="{total_width}" height="{total_height}" xmlns="http://www.w3.org/2000/svg">',
-        "<defs>",
-        '  <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">',
-        '    <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#8a8a84"/>',
-        "  </marker>",
-        "</defs>",
+        return '<p class="empty-object">No skill nodes.</p>'
+    cols = 3 if len(nodes) > 2 else max(1, len(nodes))
+    node_w = 170
+    node_h = 56
+    gap_x = 64
+    gap_y = 72
+    pad_x = 24
+    pad_y = 28
+    positions: dict[str, tuple[float, float]] = {}
+    for index, node in enumerate(nodes):
+        row, col = divmod(index, cols)
+        positions[node.id] = (
+            pad_x + col * (node_w + gap_x),
+            pad_y + row * (node_h + gap_y),
+        )
+    rows = (len(nodes) + cols - 1) // cols
+    width = pad_x * 2 + cols * node_w + max(0, cols - 1) * gap_x
+    height = pad_y * 2 + rows * node_h + max(0, rows - 1) * gap_y
+    parts = [
+        f'<div class="graph-stage" data-graph="relations" style="width:{width}px;height:{height}px">',
+        f'<svg class="graph-svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">',
+        '<defs><marker id="graph-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">',
+        '<path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#757575"/></marker></defs>',
     ]
-    for i in range(count - 1):
-        x1 = 20 + (i + 1) * node_width + i * gap
-        x2 = x1 + gap
-        y = 35
-        rel = edge_label_map.get(nodes[i].id, "then")
-        svg_parts.append(
-            f'<line x1="{x1}" y1="{y}" x2="{x2}" y2="{y}" stroke="#2a2a2a" stroke-width="2" marker-end="url(#arrow)" />'
+    for edge in edges:
+        if edge.source not in positions or edge.target not in positions:
+            continue
+        x1, y1 = positions[edge.source]
+        x2, y2 = positions[edge.target]
+        start_x = x1 + node_w / 2
+        start_y = y1 + node_h / 2
+        end_x = x2 + node_w / 2
+        end_y = y2 + node_h / 2
+        parts.append(
+            f'<line class="graph-edge" x1="{start_x:.1f}" y1="{start_y:.1f}" '
+            f'x2="{end_x:.1f}" y2="{end_y:.1f}" stroke="#757575" stroke-width="1.5" '
+            'marker-end="url(#graph-arrow)" />'
         )
-        mid_x = (x1 + x2) / 2
-        svg_parts.append(
-            f'<text x="{mid_x}" y="{y - 6}" font-family="ui-sans-serif, system-ui, sans-serif" font-size="10" fill="#8a8a84" text-anchor="middle">{_e(rel)}</text>'
+        mid_x = (start_x + end_x) / 2
+        mid_y = (start_y + end_y) / 2 - 10
+        parts.append(
+            f'<text class="graph-edge-label" x="{mid_x:.1f}" y="{mid_y:.1f}" '
+            'text-anchor="middle" fill="#757575" font-size="11" '
+            f'font-family="Instrument Sans, ui-sans-serif, sans-serif">{_e(edge.relation)}</text>'
         )
-    for i, node in enumerate(nodes):
-        x = 20 + i * (node_width + gap)
-        y = 17
-        label = node.name
-        if len(label) > 16:
-            label = label[:15] + "…"
-        svg_parts.append(
-            f'<rect x="{x}" y="{y}" width="{node_width}" height="{node_height}" rx="6" fill="#1C1C22" stroke="#2A2A33" stroke-width="1.5"/>'
+    parts.append("</svg><ul class=\"graph-nodes\">")
+    for node in nodes:
+        x, y = positions[node.id]
+        parts.append(
+            f'<li class="graph-node" data-node="{_e(node.id)}" '
+            f'style="left:{x:.0f}px;top:{y:.0f}px;width:{node_w}px;height:{node_h}px" '
+            f'title="{_e(node.detail)}">'
+            f'<span class="mono-caption">{_level_abbr(node.level)}</span>'
+            f"<strong>{_e(node.name)}</strong>"
+            "</li>"
         )
-        svg_parts.append(
-            f'<text x="{x + 8}" y="{y + 16}" font-family="ui-monospace, monospace" font-size="10" fill="#8a8a84">{_level_abbr(node.level)}</text>'
-        )
-        svg_parts.append(
-            f'<text x="{x + 8}" y="{y + 28}" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" font-weight="600" fill="#F5F5F4">{_e(label)}</text>'
-        )
-    svg_parts.append("</svg></div>")
-    return "".join(svg_parts)
+    parts.append("</ul></div>")
+    return "".join(parts)
 
 
 def _render_role_graph(output: RoleEnablement) -> str:
-    outgoing_map: dict[str, list[tuple[str, str]]] = {}
-    incoming_map: dict[str, list[tuple[str, str]]] = {}
-    for edge in output.skill_graph.edges:
-        outgoing_map.setdefault(edge.source, []).append((edge.target, edge.relation))
-        incoming_map.setdefault(edge.target, []).append((edge.source, edge.relation))
-    skill_chips = "".join(
-        f'<span class="skill-chip">'
-        f'<span class="mono-caption">{_level_abbr(node.level)}</span> '
-        f"<strong>{_e(node.name)}</strong>"
-        "</span>"
-        for node in output.skill_graph.nodes
-    )
-    nodes_items = []
-    for node in output.skill_graph.nodes:
-        adj_tags = []
-        if node.id in incoming_map:
-            for src, rel in incoming_map[node.id]:
-                if rel == "prerequisite":
-                    adj_tags.append(f'<span class="adj-tag">requires {_e(src)}</span>')
-        if node.id in outgoing_map:
-            for tgt, rel in outgoing_map[node.id]:
-                if rel == "prerequisite":
-                    adj_tags.append(f'<span class="adj-tag">supports {_e(tgt)}</span>')
-                elif rel in {"before", "after", "then"}:
-                    adj_tags.append(f'<span class="adj-tag">{_e(rel)} → {_e(tgt)}</span>')
-                else:
-                    adj_tags.append(f'<span class="adj-tag">{_e(rel)} {_e(tgt)}</span>')
-        adj_html = f'<div class="graph-adj-row">{" ".join(adj_tags)}</div>' if adj_tags else ""
-        nodes_items.append(
-            '<li class="graph-node-row">'
-            '<div class="graph-node-head">'
-            f'<span class="mono-caption">{_level_abbr(node.level)}</span> '
-            f'<span class="graph-node-name">{_e(node.name)}</span>'
-            "</div>"
-            f'<p class="graph-node-detail">{_e(node.detail)}</p>'
-            f"{adj_html}"
-            "</li>"
-        )
-    nodes_html = "".join(nodes_items) if nodes_items else "<li>No skill nodes.</li>"
     return (
         '<section class="skill-graph object">'
-        '<h3>Graph <span class="object-tag">Skills</span></h3>'
-        f'<div class="skill-chips-row">{skill_chips}</div>'
-        f'<ol class="graph-list">{nodes_html}</ol>'
+        "<h3>Graph</h3>"
+        f"{_graph_figure(output.skill_graph.nodes, output.skill_graph.edges)}"
         "</section>"
     )
 
