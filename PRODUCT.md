@@ -123,11 +123,11 @@ Ryan authorized shipping Tablework as a premier public product. Anyone can paste
 
 The public app is the same `generate()` and the same Role Source HTML as loopback. Request handling lives in `src/enablement_studio/handler.py`: `(method, path, query, body, headers) → (status, headers, body)`. Local `ThreadingHTTPServer` and the Cloudflare Worker `fetch()` both call it.
 
-- Worker: `src/worker.py`, `from workers import WorkerEntrypoint, Response`. `wrangler.toml` name `enablement-studio`, `compatibility_flags = ["python_workers"]`.
+- Worker: `src/worker.py`, `from workers import WorkerEntrypoint, Response`. `wrangler.toml` name `enablement-studio`, `compatibility_flags = ["python_workers"]`. Pages `pages deploy` rejects `main`, `[assets]`, `[[migrations]]`, and Durable Object bindings without `script_name`; do not add those back. The static-assets binding must not be named `ASSETS`.
 - Existing Pages project `enablement-studio`, production branch `main`. URL after first deploy: `https://enablement-studio.pages.dev`. Do not create a second project. No custom domain.
 - Public store is not a global D1 table. Each visitor gets a random session cookie. Their runs live in an ephemeral sqlite file for the request, then the file bytes go to a Durable Object keyed by that cookie (KV-shaped: one key, short TTL). Isolate memory dies between requests; a shared guestbook would leak pastes.
 - Local Air store stays file SQLite at `data/enablement.db`.
-- Worker serves `/static/fonts/*` the same as loopback (package files, plus the ASSETS binding).
+- Worker serves `/static/fonts/*` the same as loopback (package files, plus the STATIC binding).
 - LLM key is the Worker secret `ENABLEMENT_LLM_API_KEY`. Do not put it in the repo, in chat, or in `wrangler.toml`. Do not read `~/.enablement_llm.env`. Studio Run is `force_offline=True` and works with no secret.
 - GET `/` is Role Source (PR 14 composition). No lobby, no three-door, no marketing hero, no Get Lifetime Access, no Sign in, no Next.js, no React, no FastAPI, no SaaS LMS.
 

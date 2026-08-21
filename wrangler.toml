@@ -1,5 +1,6 @@
 # Tablework public host. Same generate()+HTML as `enablement serve`.
-# Python Worker (Pyodide). http.server / threading are not used here.
+# Python Worker entry: src/worker.py (Pyodide). http.server / threading
+# are not used on the public host.
 #
 # TARGET: the existing Pages project on Ryan's Cloudflare account.
 #   name              = enablement-studio
@@ -7,6 +8,20 @@
 #   URL after first deploy: https://enablement-studio.pages.dev
 # Do not create a second Workers or Pages project. Do not change `name`.
 # No custom domain.
+#
+# wrangler 4.85.0 `pages deploy` treats this file as a Pages config because
+# pages_build_output_dir is set. Pages rejects `main`, `[assets]`,
+# `[[rules]]`, `[[migrations]]`, and Durable Object bindings without
+# script_name. The name ASSETS is reserved. Do not add those back.
+#
+# SessionVault stays in src/worker.py (es_sid cookie, 1h TTL). Pages cannot
+# create a Durable Object in this project; script_name would point at a
+# second Worker. Optional KV (same isolation). Create with:
+#   npx wrangler kv namespace create SESSIONS
+# then uncomment and paste the id. The Worker prefers SESSIONS when bound.
+# [[kv_namespaces]]
+# binding = "SESSIONS"
+# id = "paste-id-here"
 #
 # First production deploy from a Cloudflare-authenticated Air (uv + Node):
 #   uvx --from workers-py pywrangler pages deploy --project-name=enablement-studio --branch=main
@@ -20,36 +35,8 @@
 # Optional LLM (do not set in this sitting; offline Run works without it):
 #   npx wrangler pages secret put ENABLEMENT_LLM_API_KEY --project-name=enablement-studio
 # Do not put the key in this file. Do not read ~/.enablement_llm.env.
-#
-# Optional Autonoma-family KV (same isolation as SessionVault). Create with:
-#   npx wrangler kv namespace create SESSIONS
-# then uncomment and paste the id. The Worker prefers SESSIONS when bound.
-# [[kv_namespaces]]
-# binding = "SESSIONS"
-# id = "paste-id-here"
 
 name = "enablement-studio"
 pages_build_output_dir = "./public"
-main = "src/worker.py"
 compatibility_date = "2026-08-21"
 compatibility_flags = ["python_workers"]
-
-[[durable_objects.bindings]]
-name = "SESSION"
-class_name = "SessionVault"
-
-[[migrations]]
-tag = "v1"
-new_sqlite_classes = ["SessionVault"]
-
-[assets]
-directory = "src/enablement_studio/static"
-binding = "ASSETS"
-run_worker_first = true
-html_handling = "none"
-not_found_handling = "none"
-
-[[rules]]
-type = "Data"
-globs = ["**/*.sql", "**/*.html", "**/*.txt", "**/*.md", "**/*.woff", "**/*.woff2"]
-fallthrough = true
