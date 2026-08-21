@@ -26,7 +26,15 @@ from enablement_studio.worker_bridge import (
     run_public_request,
 )
 
-from test_serve import _assert_source_table, _assert_step_chrome, _assert_primary_object
+from test_serve import (
+    _assert_graph_relationships,
+    _assert_no_fake_ae_object_copy,
+    _assert_no_public_engineer_chrome,
+    _assert_object_cells_link_this_run,
+    _assert_primary_object,
+    _assert_source_table,
+    _assert_step_chrome,
+)
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -77,18 +85,36 @@ def _call(
     return status, text, location, resp_headers, payload
 
 
+def test_public_empty_source_has_no_harborline_preview(tmp_path: Path) -> None:
+    store = Store(tmp_path / "public.db")
+    status, body, location, _headers, _payload = _call("GET", "/", store=store)
+    assert status == 200
+    assert location is None
+    _assert_no_fake_ae_object_copy(body)
+    _assert_no_public_engineer_chrome(body)
+    assert "interchange" not in body.lower()
+    assert "$2.40" not in body
+    assert 'class="objectives object"' not in body
+    assert 'class="outline object"' not in body
+    assert 'class="practice object"' not in body
+    assert 'class="quiz object"' not in body
+
+
 def test_public_handler_get_home_is_role_source(tmp_path: Path) -> None:
     store = Store(tmp_path / "public.db")
     status, body, location, _headers, _payload = _call("GET", "/", store=store)
     assert status == 200
     assert location is None
-    _assert_source_table(body, status_line=PUBLIC_STATUS_LINE)
-    assert "public · offline" in body
+    _assert_source_table(body, public=True)
+    _assert_no_public_engineer_chrome(body)
+    _assert_no_fake_ae_object_copy(body)
+    assert "public · offline" not in body
     assert "<textarea" in body
-    assert "Run Harborline" in body
-    assert 'class="collection"' in body
-    assert "path-card" in body
-    assert body.count("path-card") >= 6
+    assert "Harborline" in body
+    assert "EXAMPLE DATA" in body
+    assert 'class="object-table"' in body
+    assert "object-cell" in body
+    assert body.count("object-cell") >= 6
     assert "Get Lifetime Access" not in body
     assert "Sign in" not in body
     assert 'class="door' not in body
@@ -110,7 +136,7 @@ def test_pages_index_is_role_source(tmp_path: Path) -> None:
     assert status == 200
     assert index.is_file()
     assert index.read_bytes() == payload
-    _assert_source_table(payload.decode("utf-8"), status_line=PUBLIC_STATUS_LINE)
+    _assert_source_table(payload.decode("utf-8"), public=True)
 
 
 def test_public_handler_serves_instrument_sans(tmp_path: Path) -> None:
@@ -148,8 +174,19 @@ def test_public_harborline_walk_is_offline_generate(
     assert "Account Executive" in body
     assert "Harborline Payments" in body
     assert "EXAMPLE DATA" in body
-    assert "engine offline" in body
+    _assert_no_public_engineer_chrome(body)
+    _assert_graph_relationships(body)
+    _assert_object_cells_link_this_run(body, store.list_runs()[0].id)
     _assert_primary_object(body, "skill-graph", "outline", "practice", "quiz")
+    run_id = store.list_runs()[0].id
+    for step in ("objectives", "outline", "practice", "quiz"):
+        status, page, _followed, _headers, _payload = _call(
+            "GET", f"/role?run={run_id}&step={step}", store=store
+        )
+        assert status == 200
+        _assert_step_chrome(page, step)
+        _assert_object_cells_link_this_run(page, run_id)
+        _assert_no_public_engineer_chrome(page)
     assert store.list_runs()[0].engine.value == "offline"
     assert default_db_path() != store.path
 
@@ -186,7 +223,9 @@ def test_public_harborline_post_is_handler_not_405(tmp_path: Path) -> None:
     _assert_step_chrome(body, "graph")
     assert "Harborline Payments" in body
     assert "EXAMPLE DATA" in body
-    assert "engine offline" in body
+    _assert_no_public_engineer_chrome(body)
+    _assert_graph_relationships(body)
+    _assert_object_cells_link_this_run(body, store.list_runs()[0].id)
     _assert_primary_object(body, "skill-graph", "outline", "practice", "quiz")
     assert store.list_runs()[0].engine.value == "offline"
 
@@ -212,7 +251,7 @@ def test_public_sessions_are_not_a_guestbook(job_text: str) -> None:
     try:
         status, body, _location, _headers, _payload = _call("GET", "/", store=bob_store)
         assert status == 200
-        _assert_source_table(body, status_line=PUBLIC_STATUS_LINE)
+        _assert_source_table(body, public=True)
         assert "Harborline Payments" not in body
         assert "weekend cash-flow" not in body
         assert bob_store.list_runs() == []
@@ -264,7 +303,7 @@ def test_run_public_request_sets_session_cookie(tmp_path: Path) -> None:
     assert sid in header_map["set-cookie"]
     assert "Secure" in header_map["set-cookie"]
     text = body.decode("utf-8")
-    _assert_source_table(text, status_line=PUBLIC_STATUS_LINE)
+    _assert_source_table(text, public=True)
     assert dumped
 
 
