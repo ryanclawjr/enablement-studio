@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import secrets
+import sqlite3
 import tempfile
 import time
 from pathlib import Path
@@ -12,6 +13,7 @@ from enablement_studio.store import Store
 
 SESSION_COOKIE = "es_sid"
 SESSION_TTL_SECONDS = 3600
+SQLITE_HEADER = b"SQLite format 3\x00"
 _SESSION_RE = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
 
 
@@ -77,25 +79,61 @@ def session_key(session_id: str) -> str:
     return f"s:{session_id}"
 
 
+def is_sqlite_blob(blob: bytes | None) -> bool:
+    return bool(blob) and blob.startswith(SQLITE_HEADER)
+
+
 def open_ephemeral_store(blob: bytes | None = None) -> Store:
-    handle, name = tempfile.mkstemp(prefix="enablement-", suffix=".db")
-    os.close(handle)
-    path = Path(name)
-    if blob:
+    path = _temp_db_path()
+    if is_sqlite_blob(blob):
         path.write_bytes(blob)
+        try:
+            return Store(path)
+        except sqlite3.DatabaseError:
+            _unlink_db(path)
+            path = _temp_db_path()
     return Store(path)
 
 
 def dump_store(store: Store) -> bytes:
-    path = Path(store.path)
-    with store.connect() as connection:
-        connection.commit()
-        connection.execute("PRAGMA wal_checkpoint(FULL)")
-    return path.read_bytes()
+    dest_path = _temp_db_path(prefix="enablement-dump-")
+    dest: sqlite3.Connection | None = None
+    blob: bytes | None = None
+    try:
+        dest = sqlite3.connect(dest_path)
+        with store.connect() as source:
+            source.commit()
+            source.backup(dest)
+        dest.close()
+        dest = None
+        candidate = dest_path.read_bytes()
+        if is_sqlite_blob(candidate):
+            blob = candidate
+    except sqlite3.Error:
+        blob = None
+    finally:
+        if dest is not None:
+            dest.close()
+        _unlink_db(dest_path)
+    if blob is not None:
+        return blob
+    with store.connect() as source:
+        source.commit()
+        source.execute("PRAGMA wal_checkpoint(FULL)")
+    return Path(store.path).read_bytes()
 
 
 def close_ephemeral_store(store: Store) -> None:
-    path = Path(store.path)
+    _unlink_db(Path(store.path))
+
+
+def _temp_db_path(prefix: str = "enablement-") -> Path:
+    handle, name = tempfile.mkstemp(prefix=prefix, suffix=".db")
+    os.close(handle)
+    return Path(name)
+
+
+def _unlink_db(path: Path) -> None:
     path.unlink(missing_ok=True)
     for suffix in ("-wal", "-shm", "-journal"):
         Path(str(path) + suffix).unlink(missing_ok=True)

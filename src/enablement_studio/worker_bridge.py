@@ -17,7 +17,28 @@ from enablement_studio.session import (
 )
 from enablement_studio.store import Store
 
+try:
+    from pyodide.ffi import to_js as _to_js
+except ImportError:
+    _to_js = None
+
 LLM_SECRET_NAME = "ENABLEMENT_LLM_API_KEY"
+BLOB_CONTENT_TYPE = "application/octet-stream"
+
+
+class JsCopiedBytes(bytes):
+    """Local stand-in for a Uint8Array already copied onto the JS heap."""
+
+
+def js_copy_bytes(data: bytes) -> object:
+    payload = bytes(data)
+    if _to_js is not None:
+        return _to_js(payload)
+    return JsCopiedBytes(payload)
+
+
+def blob_headers() -> dict[str, str]:
+    return {"Content-Type": BLOB_CONTENT_TYPE}
 
 
 def apply_worker_llm_secret(env: object) -> None:
@@ -108,10 +129,14 @@ def kv_options() -> dict[str, Any]:
 
 
 __all__ = [
+    "BLOB_CONTENT_TYPE",
     "LLM_SECRET_NAME",
+    "JsCopiedBytes",
     "apply_worker_llm_secret",
+    "blob_headers",
     "dispatch_public",
     "header_map",
+    "js_copy_bytes",
     "kv_options",
     "resolve_session_id",
     "run_public_request",
