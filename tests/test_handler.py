@@ -261,6 +261,11 @@ def test_worker_entry_and_wrangler_are_public_host_shape() -> None:
     assert "enablement-studio" in wrangler
     assert 'compatibility_flags = ["python_workers"]' in wrangler
     assert "main = " in wrangler and "src/worker.py" in wrangler
+    assert 'pages_build_output_dir = "./public"' in wrangler
+    assert "--project-name=enablement-studio" in wrangler
+    assert "--branch=main" in wrangler
+    assert "workers_dev" not in wrangler
+    assert "Create that project once" not in wrangler
     assert "[vars]" not in wrangler
     assert "sk-" not in wrangler
     assert "enablement_llm.env" not in worker
@@ -268,6 +273,11 @@ def test_worker_entry_and_wrangler_are_public_host_shape() -> None:
     assert 'dependencies = []' in pyproject
     assert "SessionVault" in worker
     assert "SessionVault" in wrangler
+    font = REPO / "public" / "static" / "fonts" / "instrument-sans-latin-400-normal.woff"
+    assert font.is_file()
+    readme = (REPO / "README.md").read_text(encoding="utf-8")
+    assert "Create a Pages project named" not in readme
+    assert "pywrangler pages deploy --project-name=enablement-studio --branch=main" in readme
 
 
 def test_handler_does_not_read_home_llm_env() -> None:

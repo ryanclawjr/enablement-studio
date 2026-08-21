@@ -72,28 +72,28 @@ That binds **127.0.0.1:8765** (loopback only; pass `--host` / `--port` to change
 
 Same Role Source, same `generate(..., force_offline=True)` as `enablement serve`. The loopback server is unchanged. Cloudflare Python Workers cannot run `http.server` / `threading`; both hosts call the pure handler in `src/enablement_studio/handler.py`.
 
-Preferred public URL (Pages project, same family as autonoma-intelligence): **https://enablement-studio.pages.dev**. No custom domain.
+Public URL after the first deploy: **https://enablement-studio.pages.dev**. That Pages project already exists on Ryan's Cloudflare account (`enablement-studio`, production branch `main`). Do not create a second project. No custom domain.
 
-From a Cloudflare-authenticated Air (uv + Node):
+From a Cloudflare-authenticated Air (uv + Node). `--branch=main` is the production deploy:
 
 ```bash
-uvx --from workers-py pywrangler deploy
+uvx --from workers-py pywrangler pages deploy --project-name=enablement-studio --branch=main
 ```
 
 After `pip install -e ".[cloudflare]"` (or `uv add --optional cloudflare`):
 
 ```bash
-uv run pywrangler deploy
+uv run pywrangler pages deploy --project-name=enablement-studio --branch=main
 ```
 
-`wrangler pages deploy` is the Autonoma static path. This app is a Python Worker, so `pywrangler deploy` is the command that publishes `generate()` + the Role Source HTML. Create a Pages project named `enablement-studio` once in the dashboard and attach this Worker to get the `pages.dev` hostname. The Worker name is `enablement-studio`; the immediate Workers URL is `https://enablement-studio.<subdomain>.workers.dev`.
+Do not run `pywrangler deploy` / `wrangler deploy` — those create a Worker and would be a second project. `pages deploy` publishes `generate()` + the Role Source HTML onto the existing Pages project.
 
 Public pastes are not a shared guestbook. Each visitor gets a session cookie. Their sqlite lives in a temp file for the request, then the bytes go to a Durable Object (KV-shaped key + TTL). Local Air still uses `data/enablement.db`.
 
 Optional LLM on the Worker is the secret `ENABLEMENT_LLM_API_KEY`:
 
 ```bash
-npx wrangler secret put ENABLEMENT_LLM_API_KEY
+npx wrangler pages secret put ENABLEMENT_LLM_API_KEY --project-name=enablement-studio
 ```
 
 Do not set it for this cut. Do not put the key in `wrangler.toml`. Do not read `~/.enablement_llm.env`. Offline Run works with no secret.
@@ -120,7 +120,8 @@ src/enablement_studio/
   serve.py   # Local UI (stdlib ThreadingHTTPServer)
   store/     # SQLite projects, runs, artifacts
 src/worker.py # Cloudflare Python Worker entry
-wrangler.toml
+wrangler.toml           # existing Pages project enablement-studio
+public/static -> package fonts (Pages output)
 fixtures/    # Fictional demo inputs
 data/        # schema.sql; enablement.db created locally
 ```

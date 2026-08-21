@@ -1,19 +1,24 @@
 # Tablework public host. Same generate()+HTML as `enablement serve`.
 # Python Worker (Pyodide). http.server / threading are not used here.
 #
-# Deploy from a Cloudflare-authenticated Air (uv + Node):
-#   uvx --from workers-py pywrangler deploy
-# After `uv add --optional cloudflare` / `pip install -e ".[cloudflare]"`:
-#   uv run pywrangler deploy
-#
-# Preferred public URL (Pages project, same family as autonoma-intelligence):
-#   https://enablement-studio.pages.dev
-# Create that project once in the dashboard and attach this Worker.
-# Immediate Workers URL: https://enablement-studio.<subdomain>.workers.dev
+# TARGET: the existing Pages project on Ryan's Cloudflare account.
+#   name              = enablement-studio
+#   production branch = main
+#   URL after first deploy: https://enablement-studio.pages.dev
+# Do not create a second Workers or Pages project. Do not change `name`.
 # No custom domain.
 #
+# First production deploy from a Cloudflare-authenticated Air (uv + Node):
+#   uvx --from workers-py pywrangler pages deploy --project-name=enablement-studio --branch=main
+# After `pip install -e ".[cloudflare]"` / `uv add --optional cloudflare`:
+#   uv run pywrangler pages deploy --project-name=enablement-studio --branch=main
+#
+# `--branch=main` matches the project's production branch, so this is the
+# production deployment (not a preview). `wrangler deploy` / `pywrangler deploy`
+# without `pages` would try to create a Worker and must not be used.
+#
 # Optional LLM (do not set in this sitting; offline Run works without it):
-#   npx wrangler secret put ENABLEMENT_LLM_API_KEY
+#   npx wrangler pages secret put ENABLEMENT_LLM_API_KEY --project-name=enablement-studio
 # Do not put the key in this file. Do not read ~/.enablement_llm.env.
 #
 # Optional Autonoma-family KV (same isolation as SessionVault). Create with:
@@ -24,10 +29,10 @@
 # id = "paste-id-here"
 
 name = "enablement-studio"
+pages_build_output_dir = "./public"
 main = "src/worker.py"
 compatibility_date = "2026-08-21"
 compatibility_flags = ["python_workers"]
-workers_dev = true
 
 [[durable_objects.bindings]]
 name = "SESSION"
