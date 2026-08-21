@@ -65,8 +65,7 @@ class Default(WorkerEntrypoint):
         path = urlparse(url).path or "/"
         static = getattr(self.env, "STATIC", None)
         if status == 404 and path.startswith("/static/") and static is not None:
-            rel = path[len("/static/") :]
-            return await static.fetch(f"https://assets.local/{rel}")
+            return await static.fetch(f"https://assets.local{path}")
         return Response(
             resp_body,
             status=status,
@@ -81,7 +80,10 @@ async def _load_blob(env, session_id: str) -> bytes | None:
         if data is None:
             return None
         return bytes(data)
-    stub = env.SESSION.get(env.SESSION.idFromName(session_id))
+    session = getattr(env, "SESSION", None)
+    if session is None:
+        return None
+    stub = session.get(session.idFromName(session_id))
     response = await stub.fetch(Request("https://session.local/blob"))
     if int(response.status) == 404:
         return None
@@ -93,5 +95,8 @@ async def _save_blob(env, session_id: str, blob: bytes) -> None:
     if kv is not None:
         await kv.put(session_key(session_id), blob, kv_options())
         return
-    stub = env.SESSION.get(env.SESSION.idFromName(session_id))
+    session = getattr(env, "SESSION", None)
+    if session is None:
+        return
+    stub = session.get(session.idFromName(session_id))
     await stub.fetch(Request("https://session.local/blob", method="PUT", body=blob))

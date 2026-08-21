@@ -72,28 +72,30 @@ That binds **127.0.0.1:8765** (loopback only; pass `--host` / `--port` to change
 
 Same Role Source, same `generate(..., force_offline=True)` as `enablement serve`. The loopback server is unchanged. Cloudflare Python Workers cannot run `http.server` / `threading`; both hosts call the pure handler in `src/enablement_studio/handler.py`.
 
-Public URL after the first deploy: **https://enablement-studio.pages.dev**. That Pages project already exists on Ryan's Cloudflare account (`enablement-studio`, production branch `main`). Do not create a second project. No custom domain.
+The public project is named **enablement-studio**. Static Pages cannot run `generate()`, so Harborline POST is 405 until a Python Worker `fetch()` is on that host. `wrangler.toml` is Workers + Static Assets (`main = src/worker.py`, assets binding `STATIC`, `run_worker_first`, SessionVault in this script). Same name. Do not create a second project or `enablement-studio-worker`. No custom domain.
 
-From a Cloudflare-authenticated Air (uv + Node). `--branch=main` is the production deploy:
+Prefer **https://enablement-studio.pages.dev** if that hostname still points at this project after convert. GET `/` is the live handler, not the `public/index.html` snapshot.
+
+From a Cloudflare-authenticated Air (uv + Node):
 
 ```bash
-uvx --from workers-py pywrangler pages deploy --project-name=enablement-studio --branch=main
+uvx --from workers-py pywrangler deploy
 ```
 
 After `pip install -e ".[cloudflare]"` (or `uv add --optional cloudflare`):
 
 ```bash
-uv run pywrangler pages deploy --project-name=enablement-studio --branch=main
+uv run pywrangler deploy
 ```
 
-Do not run `pywrangler deploy` / `wrangler deploy` — those create a Worker and would be a second project. `pages deploy` publishes onto the existing Pages project. wrangler 4.85.0 rejects a Pages config that sets `main`, `[assets]`, `[[migrations]]`, or a Durable Object without `script_name`, and it reserves the binding name `ASSETS`.
+Do not upload static-only after this. wrangler 4.85.0 treats `pages_build_output_dir` as Pages and then rejects `main`, `[assets]`, `[[migrations]]`, `[[rules]]`, and a Durable Object without `script_name`. It also reserves `ASSETS`. This file has none of those Pages keys.
 
 Public pastes are not a shared guestbook. Each visitor gets a session cookie. Their sqlite lives in a temp file for the request, then the bytes go to a Durable Object (KV-shaped key + TTL). Local Air still uses `data/enablement.db`.
 
 Optional LLM on the Worker is the secret `ENABLEMENT_LLM_API_KEY`:
 
 ```bash
-npx wrangler pages secret put ENABLEMENT_LLM_API_KEY --project-name=enablement-studio
+npx wrangler secret put ENABLEMENT_LLM_API_KEY
 ```
 
 Do not set it for this cut. Do not put the key in `wrangler.toml`. Do not read `~/.enablement_llm.env`. Offline Run works with no secret.
@@ -120,9 +122,9 @@ src/enablement_studio/
   serve.py   # Local UI (stdlib ThreadingHTTPServer)
   store/     # SQLite projects, runs, artifacts
 src/worker.py # Cloudflare Python Worker entry
-wrangler.toml           # existing Pages project enablement-studio
-public/index.html       # Role Source snapshot for Pages GET /
-public/static -> package fonts (Pages output)
+wrangler.toml           # Workers + Static Assets, name enablement-studio
+public/index.html       # Role Source snapshot fallback
+public/static -> package fonts
 fixtures/    # Fictional demo inputs
 data/        # schema.sql; enablement.db created locally
 ```

@@ -123,11 +123,11 @@ Ryan authorized shipping Tablework as a premier public product. Anyone can paste
 
 The public app is the same `generate()` and the same Role Source HTML as loopback. Request handling lives in `src/enablement_studio/handler.py`: `(method, path, query, body, headers) → (status, headers, body)`. Local `ThreadingHTTPServer` and the Cloudflare Worker `fetch()` both call it.
 
-- Worker: `src/worker.py`, `from workers import WorkerEntrypoint, Response`. `wrangler.toml` name `enablement-studio`, `compatibility_flags = ["python_workers"]`. Pages `pages deploy` rejects `main`, `[assets]`, `[[migrations]]`, and Durable Object bindings without `script_name`; do not add those back. The static-assets binding must not be named `ASSETS`.
-- Existing Pages project `enablement-studio`, production branch `main`. URL after first deploy: `https://enablement-studio.pages.dev`. Do not create a second project. No custom domain.
-- Public store is not a global D1 table. Each visitor gets a random session cookie. Their runs live in an ephemeral sqlite file for the request, then the file bytes go to a Durable Object keyed by that cookie (KV-shaped: one key, short TTL). Isolate memory dies between requests; a shared guestbook would leak pastes.
+- Worker: `src/worker.py`, `from workers import WorkerEntrypoint, Response`. `wrangler.toml` name `enablement-studio`, `main = src/worker.py`, `compatibility_flags = ["python_workers"]`. Assets directory `./public`, binding `STATIC` (not `ASSETS`), `run_worker_first`. SessionVault is a same-script Durable Object. Do not put `pages_build_output_dir` back. wrangler 4.85.0 Pages config rejects `main`, `[assets]`, `[[migrations]]`, `[[rules]]`, and a Durable Object without `script_name`.
+- One project named `enablement-studio`. Prefer `https://enablement-studio.pages.dev` if that hostname still points at this project after convert. Do not create a second project or `enablement-studio-worker`. No custom domain. Air command: `uvx --from workers-py pywrangler deploy`.
+- Public store is not a global D1 table. Each visitor gets a random session cookie. Their runs live in an ephemeral sqlite file for the request, then the file bytes go to a Durable Object keyed by that cookie (KV-shaped: one key, short TTL). Isolate memory dies between requests; a shared guestbook would leak pastes. Harborline POST can finish `generate()` even if the vault is missing; the walk after Graph needs the store.
 - Local Air store stays file SQLite at `data/enablement.db`.
-- Worker serves `/static/fonts/*` the same as loopback (package files, plus the STATIC binding).
+- Worker GET `/` is the live handler HTML. `public/index.html` is a snapshot fallback. Fonts are package files plus the STATIC binding.
 - LLM key is the Worker secret `ENABLEMENT_LLM_API_KEY`. Do not put it in the repo, in chat, or in `wrangler.toml`. Do not read `~/.enablement_llm.env`. Studio Run is `force_offline=True` and works with no secret.
 - GET `/` is Role Source (PR 14 composition). No lobby, no three-door, no marketing hero, no Get Lifetime Access, no Sign in, no Next.js, no React, no FastAPI, no SaaS LMS.
 
