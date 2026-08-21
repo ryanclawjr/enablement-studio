@@ -2,41 +2,59 @@
 # Python Worker entry: src/worker.py (Pyodide). http.server / threading
 # are not used on the public host.
 #
-# TARGET: the existing Pages project on Ryan's Cloudflare account.
-#   name              = enablement-studio
-#   production branch = main
-#   URL after first deploy: https://enablement-studio.pages.dev
-# Do not create a second Workers or Pages project. Do not change `name`.
-# No custom domain.
+# TARGET: the existing Cloudflare project named enablement-studio.
+# Static Pages cannot run generate(); Harborline POST is 405 there.
+# This file is a Worker + Static Assets config so fetch() is on the
+# public host. Same name. One project. Do not invent a second name.
+# Prefer https://enablement-studio.pages.dev if that hostname still
+# points at this project after convert. No custom domain.
 #
-# wrangler 4.85.0 `pages deploy` treats this file as a Pages config because
-# pages_build_output_dir is set. Pages rejects `main`, `[assets]`,
-# `[[rules]]`, `[[migrations]]`, and Durable Object bindings without
-# script_name. The name ASSETS is reserved. Do not add those back.
+# wrangler 4.85.0 treats pages_build_output_dir as Pages and then
+# rejects `main`, `[assets]`, `[[rules]]`, `[[migrations]]`, and a
+# Durable Object without script_name. It also reserves ASSETS.
+# Do not put pages_build_output_dir back.
 #
-# SessionVault stays in src/worker.py (es_sid cookie, 1h TTL). Pages cannot
-# create a Durable Object in this project; script_name would point at a
-# second Worker. Optional KV (same isolation). Create with:
+# SessionVault is a same-script Durable Object (es_sid, 1h TTL).
+# Optional KV (same isolation). Create with:
 #   npx wrangler kv namespace create SESSIONS
 # then uncomment and paste the id. The Worker prefers SESSIONS when bound.
 # [[kv_namespaces]]
 # binding = "SESSIONS"
 # id = "paste-id-here"
 #
-# First production deploy from a Cloudflare-authenticated Air (uv + Node):
-#   uvx --from workers-py pywrangler pages deploy --project-name=enablement-studio --branch=main
+# Production deploy from a Cloudflare-authenticated Air (uv + Node):
+#   uvx --from workers-py pywrangler deploy
 # After `pip install -e ".[cloudflare]"` / `uv add --optional cloudflare`:
-#   uv run pywrangler pages deploy --project-name=enablement-studio --branch=main
+#   uv run pywrangler deploy
 #
-# `--branch=main` matches the project's production branch, so this is the
-# production deployment (not a preview). `wrangler deploy` / `pywrangler deploy`
-# without `pages` would try to create a Worker and must not be used.
+# Do not upload static-only after this. Do not deploy a second name.
+# Do not put ENABLEMENT_LLM_API_KEY in this file.
 #
-# Optional LLM (do not set in this sitting; offline Run works without it):
-#   npx wrangler pages secret put ENABLEMENT_LLM_API_KEY --project-name=enablement-studio
-# Do not put the key in this file. Do not read ~/.enablement_llm.env.
+# Optional LLM (offline Run works without it):
+#   npx wrangler secret put ENABLEMENT_LLM_API_KEY
+# Do not read ~/.enablement_llm.env.
 
 name = "enablement-studio"
-pages_build_output_dir = "./public"
+main = "src/worker.py"
 compatibility_date = "2026-08-21"
 compatibility_flags = ["python_workers"]
+
+[assets]
+directory = "./public"
+binding = "STATIC"
+run_worker_first = true
+html_handling = "none"
+not_found_handling = "none"
+
+[[durable_objects.bindings]]
+name = "SESSION"
+class_name = "SessionVault"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SessionVault"]
+
+[[rules]]
+type = "Data"
+globs = ["**/*.sql", "**/*.html", "**/*.txt", "**/*.md", "**/*.woff", "**/*.woff2"]
+fallthrough = true

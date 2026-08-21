@@ -154,6 +154,43 @@ def test_public_harborline_walk_is_offline_generate(
     assert default_db_path() != store.path
 
 
+def test_public_harborline_post_is_handler_not_405(tmp_path: Path) -> None:
+    wrangler = tomllib.loads((REPO / "wrangler.toml").read_text(encoding="utf-8"))
+    assert wrangler.get("main") == "src/worker.py"
+    assert "pages_build_output_dir" not in wrangler
+    assets = wrangler["assets"]
+    assert assets.get("binding") == "STATIC"
+    assert str(assets.get("binding", "")).upper() != "ASSETS"
+    assert assets.get("run_worker_first") is True
+
+    store = Store(tmp_path / "public.db")
+    posted = urlencode({"action": "demo", "product": "role"})
+    status, _body, location, _headers, _payload = _call(
+        "POST",
+        "/",
+        store=store,
+        body=posted,
+        headers={
+            "origin": "https://enablement-studio.pages.dev",
+            "referer": "https://enablement-studio.pages.dev/",
+            "host": "enablement-studio.pages.dev",
+        },
+        follow=False,
+    )
+    assert status != 405
+    assert status == 303
+    assert location is not None
+    assert "step=graph" in location
+    status, body, _followed, _headers, _payload = _call("GET", location, store=store)
+    assert status == 200
+    _assert_step_chrome(body, "graph")
+    assert "Harborline Payments" in body
+    assert "EXAMPLE DATA" in body
+    assert "engine offline" in body
+    _assert_primary_object(body, "skill-graph", "outline", "practice", "quiz")
+    assert store.list_runs()[0].engine.value == "offline"
+
+
 def test_public_sessions_are_not_a_guestbook(job_text: str) -> None:
     kv = MemoryKV()
     alice = new_session_id()
@@ -269,65 +306,46 @@ def test_apply_worker_llm_secret_uses_env_only(
     assert os.environ[LLM_SECRET_NAME] == "worker-secret"
 
 
-# wrangler 4.85.0 validatePagesConfig supported keys (workers-sdk).
-_PAGES_WRANGLER_FIELDS = {
-    "ai",
-    "analytics_engine_datasets",
-    "browser",
-    "compatibility_date",
-    "compatibility_flags",
-    "d1_databases",
-    "dev",
-    "durable_objects",
-    "hyperdrive",
-    "kv_namespaces",
-    "limits",
-    "mtls_certificates",
-    "name",
-    "no_bundle",
-    "pages_build_output_dir",
-    "placement",
-    "queues",
-    "r2_buckets",
-    "send_metrics",
-    "services",
-    "upload_source_maps",
-    "vars",
-    "vectorize",
-    "version_metadata",
-}
-
-
 def test_pages_assets_binding_is_not_reserved_name() -> None:
     wrangler_text = (REPO / "wrangler.toml").read_text(encoding="utf-8")
     wrangler = tomllib.loads(wrangler_text)
     worker = (REPO / "src/worker.py").read_text(encoding="utf-8")
     assets = wrangler.get("assets")
-    if assets is not None:
-        assert str(assets.get("binding", "")).upper() != "ASSETS"
+    assert assets is not None
+    assert assets.get("binding") == "STATIC"
+    assert str(assets.get("binding", "")).upper() != "ASSETS"
     assert 'binding = "ASSETS"' not in wrangler_text
     assert 'getattr(self.env, "ASSETS"' not in worker
     assert "self.env.ASSETS" not in worker
 
 
-def test_pages_wrangler_config_is_legal() -> None:
-    wrangler = tomllib.loads((REPO / "wrangler.toml").read_text(encoding="utf-8"))
-    unknown = set(wrangler) - _PAGES_WRANGLER_FIELDS
-    assert unknown == set()
+def test_wrangler_is_worker_static_assets() -> None:
+    wrangler_text = (REPO / "wrangler.toml").read_text(encoding="utf-8")
+    wrangler = tomllib.loads(wrangler_text)
     assert wrangler["name"] == "enablement-studio"
-    assert wrangler["pages_build_output_dir"] == "./public"
-    assert "main" not in wrangler
-    assert "assets" not in wrangler
-    assert "migrations" not in wrangler
-    assert "rules" not in wrangler
-    assert "[vars]" not in (REPO / "wrangler.toml").read_text(encoding="utf-8")
-    for binding in wrangler.get("durable_objects", {}).get("bindings", []):
-        assert binding.get("script_name")
+    assert wrangler["main"] == "src/worker.py"
+    assert "pages_build_output_dir" not in wrangler
+    assets = wrangler["assets"]
+    assert assets["directory"] == "./public"
+    assert assets["binding"] == "STATIC"
+    assert assets["run_worker_first"] is True
+    bindings = wrangler["durable_objects"]["bindings"]
+    assert bindings == [{"name": "SESSION", "class_name": "SessionVault"}]
+    assert "script_name" not in bindings[0]
+    migrations = wrangler["migrations"]
+    assert migrations[0]["tag"] == "v1"
+    assert "SessionVault" in migrations[0]["new_sqlite_classes"]
+    assert "[vars]" not in wrangler_text
+    assert "sk-" not in wrangler_text
+    assert wrangler["name"] != "enablement-studio-worker"
+    assert "pywrangler deploy" in wrangler_text
+    assert "pages deploy" not in wrangler_text
 
 
 def test_worker_entry_and_wrangler_are_public_host_shape() -> None:
     worker = (REPO / "src/worker.py").read_text(encoding="utf-8")
     wrangler = (REPO / "wrangler.toml").read_text(encoding="utf-8")
+    parsed = tomllib.loads(wrangler)
     pyproject = (REPO / "pyproject.toml").read_text(encoding="utf-8")
     assert "from workers import WorkerEntrypoint, Response" in worker or (
         "from workers import DurableObject, Request, Response, WorkerEntrypoint"
@@ -336,16 +354,18 @@ def test_worker_entry_and_wrangler_are_public_host_shape() -> None:
     assert "class Default(WorkerEntrypoint)" in worker
     assert "enablement-studio" in wrangler
     assert 'compatibility_flags = ["python_workers"]' in wrangler
-    assert "src/worker.py" in wrangler
-    assert 'pages_build_output_dir = "./public"' in wrangler
-    assert "--project-name=enablement-studio" in wrangler
-    assert "--branch=main" in wrangler
-    assert "workers_dev" not in wrangler
+    assert 'main = "src/worker.py"' in wrangler
+    assert "pages_build_output_dir" not in parsed
+    assert "pywrangler deploy" in wrangler
+    assert "pages deploy" not in wrangler
+    assert parsed["name"] == "enablement-studio"
     assert "Create that project once" not in wrangler
     assert "[vars]" not in wrangler
     assert "sk-" not in wrangler
     assert "enablement_llm.env" not in worker
     assert "Path.home()" not in worker
+    assert 'getattr(env, "SESSION"' in worker
+    assert "https://assets.local{path}" in worker
     assert 'dependencies = []' in pyproject
     assert "SessionVault" in worker
     assert "SessionVault" in wrangler
@@ -353,7 +373,8 @@ def test_worker_entry_and_wrangler_are_public_host_shape() -> None:
     assert font.is_file()
     readme = (REPO / "README.md").read_text(encoding="utf-8")
     assert "Create a Pages project named" not in readme
-    assert "pywrangler pages deploy --project-name=enablement-studio --branch=main" in readme
+    assert "uvx --from workers-py pywrangler deploy" in readme
+    assert "pywrangler pages deploy" not in readme
 
 
 def test_handler_does_not_read_home_llm_env() -> None:
